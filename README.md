@@ -1,177 +1,111 @@
 # Pomona
 
-A morning brief, written from the things you're actually in the middle of. One
-page a day: what to move, what's waiting on you, who you're seeing, and a
-public-domain painting to look at while you read it.
+One page every morning, written from what you are actually in the middle of.
 
-Named for the goddess of orchards: she kept the fruit, you keep the day.
+Pomona reads your Slack, GitHub, calendar and Linear overnight, works out what is yours, what is being asked of you and what has quietly lapsed, and has Claude write a single page about your day. It is ready before you open the browser, and the browser opens it.
 
-Two pieces. A **Go server** holds your sources, your schedule and your
-credentials, and runs Claude. A **Chrome extension** pairs with it once, using a
-six digit code the way you pair a phone to a television, and after that just
-reads and renders.
+![The brief](docs/screenshots/brief.png)
 
-## Why a server
+It runs as a small Go server (one binary, no dependencies, everything encrypted at rest) plus a Chrome extension that is only a face for it. Use the hosted one at **pomona.leafd.dev** or run the server yourself; the setup is the same either way.
 
-The extension used to do everything itself, and it hit a wall: on a Claude
-subscription the Messages API serves a browser token **Haiku 4.5 and nothing
-else**. Opus and Sonnet come back `429 rate_limit_error` no matter how long you
-wait, because it isn't a rate limit. Anthropic scopes those tokens to Claude
-Code and checks the system prompt.
+## How it works
 
-The server sidesteps that honestly: it runs the `claude` CLI you already have,
-which *is* Claude Code, so every model is available and your plan covers it. No
-API key, nothing spoofed.
+Every morning, twenty minutes before the hour you picked:
 
-## Running it
+1. **Sweep.** Slack is read where you were yesterday first (search for your mentions and for what you said), then the rooms you own, then the rest, inside a fixed time budget. GitHub gives review requests, assignments, notifications and what you merged. Calendar and Linear are one call each. Rooms you ticked as off limits are never fetched.
+2. **Store.** Clipped excerpts go into an encrypted signal store with a cursor per room, so tomorrow asks only for what is new. Three days, then gone.
+3. **Own.** From where you post, what you merge and what you made, it works out what is yours, with reasons you can read and undo. A room that shares a name with a repository you push to is yours. A room you were just added to surfaces on its own.
+4. **Triage.** A small model (Haiku) reads every new excerpt and says what it is: an ask of you, an unanswered question in a place you own, news, done, noise. Direct messages, review requests and severe advisories keep a floor whatever it says.
+5. **Judge the old.** Yesterday's to-dos are looked at again: a deck for Tuesday's sync has lapsed by Wednesday. An undated one is let go after two mornings.
+6. **Write.** The writing model (Opus by default) sees at most thirty ranked items, your calendar, your last three briefs' to-dos and what you own, and writes the page. The colophon at the bottom says what it cost.
 
-```bash
-go build -o /usr/local/bin/pomona ./server
-pomona
+Nothing sits in a loop. The server wakes for the morning and for a click on Regenerate.
+
+## Install
+
+### Just the website
+
+Open **[pomona.leafd.dev](https://pomona.leafd.dev)**. Sign in with Slack or with a code sent to your email, walk through the four choices, and that is it: the brief is written on the server before the hour you picked, and it is there whenever you open the page. No extension. Chrome's "Install Pomona" in the address bar gives it a dock icon and its own window, if you like that.
+
+The extension is optional. It adds exactly two things: it opens the brief in a tab on its own at the hour, or the moment the browser starts if it was written while you were away, and it can notify you. If you would rather open a page yourself, you never need it.
+
+### The extension
+
+1. Download `pomona-extension-<version>.zip` from the [latest release](https://github.com/LeafdTK/pomona/releases), unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked**, pick the folder.
+2. The setup page opens on its own. Choose **pomona.leafd.dev**, press Connect: a small window signs you in with Slack or with a code sent to your email, and closes.
+3. Decide how much of Slack it may read (Slack itself enforces the tier), tick anything it must never read, paste an Anthropic API key, pick the hour. Name, role and timezone are read from what you connected.
+
+![What it may read](docs/screenshots/welcome-read.png)
+
+That is the whole of it. Tomorrow's brief is written on its own; today's is one click.
+
+### Your own machine
+
+You need Go 1.26 and, for subscription mode, [Claude Code](https://claude.com/claude-code) signed in.
+
+```sh
+git clone https://github.com/LeafdTK/pomona && cd pomona
+sh dev/install-service.sh        # builds, installs a launchd agent, starts it at login
 ```
 
-That's the install. It listens on `127.0.0.1:7777`, keeps its data in
-`~/.pomona`, and prints one line:
+Or without the service: `go build -o pomona ./server && ./pomona`. Either way the server is at `http://127.0.0.1:7777`, and a browser on the same machine signs in without being asked anything.
 
-```
-  Open  http://127.0.0.1:7777
-```
+Then load the extension unpacked from the repo root and choose **This computer** in setup. With Claude Code on the machine there is no key to paste at all; GitHub is one click if `gh` is signed in.
 
-Open it. There is no account, no passphrase and no pairing code: a browser on
-your own machine adopts itself, because anything local could already read
-`~/.pomona`, so a code would be ceremony rather than security. Say who you are,
-connect a source, press **Write one now**.
+## Use
 
-The Chrome extension is optional and gets you the same pages plus a toolbar
-button: `chrome://extensions` → Developer mode → **Load unpacked** → this
-folder. It finds the server and adopts itself the same way.
+- **The page.** Push forward (the one thing two sources make obvious, with a draft when it is a message to send), top to-dos with due dates, new updates with where they happened, your day, and looking ahead. The day's painting is from the Cleveland Museum of Art's open collection.
+- **Tick** a to-do and tomorrow knows. **Bury** a place and it stops being gathered. **Doesn't look right?** tells the writer it got something wrong, and that is final.
+- **Regenerate** rewrites today's from the store; the sweep is not repeated.
+- **Settings** shows what it worked out you own, what it remembers, what you silenced, what faded on its own, and what Claude cost this week. Everything there is one click to undo.
 
-### If the server isn't on your machine
+![What you own](docs/screenshots/settings-owned.png)
 
-Reachable from elsewhere, it stops trusting the network and prints a six digit
-code every two minutes, which you type once into the browser. Codes die after
-five wrong guesses and burn on use.
+## What it reads and keeps
 
-### If you want a passphrase
+The short version: only what your Slack tier allows, and Slack enforces the tier; clipped excerpts for three days; the pages it wrote for as long as you choose; your tokens in your own encrypted file; at most thirty excerpts to Claude a morning, and the model never sees a channel list. The whole of it is on the server at `/privacy` and in [PRIVACY.md](PRIVACY.md).
 
-```bash
-pomona --passphrase
-```
+What it cannot promise: whoever runs the server can read the key out of the process, because the process needs it to read your Slack at seven in the morning. A hosted Pomona is a trust in whoever hosts it. Running it yourself is one binary.
 
-Then the key is wrapped under it rather than kept beside the data, and the
-server starts locked after every restart. Worth knowing what you trade: a locked
-server cannot write your 07:30 brief until someone is awake to unlock it.
+## Self-hosting
 
-## Sources
-
-Everything is read-only and lives on the server.
-
-| Source | What it needs | What it reads |
-|---|---|---|
-| **Calendar** | Your calendar's secret `.ics` address | Today and tomorrow's meetings, attendees, locations |
-| **Slack** | A user token (`xoxp-`), scoped to what you pick | Mentions from the last day, in as much of Slack as you allow |
-| **GitHub** | A PAT with `repo` + `notifications` | Review requests, assigned issues, your open PRs, notifications |
-| **Linear** | A personal API key | Issues assigned to you, anything you follow that moved |
-| **Anything else** | A URL | JSON, RSS/Atom, or plain text: a status page, a changelog, your own API |
-
-Calendar is an `.ics` URL, not OAuth: Google Calendar → Settings → your calendar
-→ *Secret address in iCal format*. Apple and Outlook publish the same. Recurring
-meetings, exceptions, moved occurrences and timezones are handled by
-`server/ics.go`, which has the tests to prove it.
-
-A source that fails doesn't sink the brief. The others still run, and the
-colophon says which one didn't answer.
-
-## Encryption
-
-Everything on disk is AES-256-GCM, with per-purpose keys derived by HKDF from a
-master key. By default that key sits in the data directory at 0600, which still
-protects the thing most likely to leak: a copy of the folder in a backup or a
-synced drive. With `--passphrase` it is instead wrapped under PBKDF2-SHA256 at
-600,000 iterations and never written down, and a cold server yields nothing.
-
-```
-Sebastian  in ciphertext: 0        health, cold    : locked=true
-Zach       in ciphertext: 0        brief, locked   : 401
-Orchard    in ciphertext: 0        wrong passphrase: rejected
+```sh
+docker build -t pomona .
+docker run -p 7777:7777 -v pomona-data:/data \
+  -e POMONA_VAULT_KEY="$(openssl rand -base64 32)" \
+  -e POMONA_SLACK_CLIENT_ID=… -e POMONA_SLACK_CLIENT_SECRET=… \
+  -e POMONA_RESEND_KEY=… \
+  pomona
 ```
 
-**What neither mode does**, and cannot: hide the key from whoever runs the
-process. The server does all the work, so it must hold usable credentials for
-your sources and for Claude, and root on that machine can read them out of
-memory. Run the server yourself and that is moot. No cryptography lets an
-untrusted host make authenticated calls for you without being able to make them
-for itself, so a hosted Pomona could never be end to end encrypted while also
-writing your brief.
-
-CORS admits only the extension and locally served pages, so a random website
-can't reach a server on your loopback.
-
-### Slack, as narrow as you like
-
-Choose what Pomona may read, and `dev/slack-app.mjs` builds an app asking for
-exactly those scopes and nothing more:
-
-| Choice | Scopes |
+| Variable | Meaning |
 |---|---|
-| Public channels only | `search:read.public` |
-| Public channels and DMs | `+ search:read.im`, `search:read.mpim` |
-| Public and private channels | `+ search:read.private` |
-| Everything you can see | all of those `+ search:read.files` |
+| `POMONA_ADDR` | Listen address. Anything but loopback is *hosted mode*: no password sign-up, rate limits on every door, HSTS behind TLS. Default `127.0.0.1:7777`. |
+| `POMONA_DATA` | The encrypted data directory. Default `~/.pomona`. Make it a volume. |
+| `POMONA_VAULT_KEY` | 32 bytes, base64. With it the key never touches the volume; without it one is made and kept in `vault.json.key`. |
+| `POMONA_SLACK_CLIENT_ID` / `_SECRET` | Your Slack app, so everyone on the server connects Slack with a click. Add `https://<host>/api/slack/callback` to the app's redirect URLs. `node dev/slack-app.mjs all --host <host>` prints a manifest with the right scopes. |
+| `POMONA_SLACK_WORKSPACE` | Send sign-ins straight to one workspace instead of Slack's picker. |
+| `POMONA_RESEND_KEY` / `POMONA_MAIL_FROM` | Emailed sign-in codes through Resend. Without a key the email door is not drawn. |
 
-```bash
-node dev/slack-app.mjs dms            # print a link that pre-fills Slack's form
-node dev/slack-app.mjs dms --create   # or create it outright, if you ran `slack login`
+Put it behind anything that terminates TLS and sets `X-Forwarded-Proto`. The hosted instance runs on Hack Club's Orchard from this repository's `master` with auto-deploy on push; see [docs/RELEASING.md](docs/RELEASING.md).
+
+A hosted server cannot use anyone's Claude subscription, so each account brings an Anthropic API key. On a machine with Claude Code signed in, the subscription is used and there is nothing to paste.
+
+## Development
+
+```sh
+go test ./server/            # the unit tests
+node dev/check.mjs           # the extension preflight: manifest, imports, permissions
+node dev/e2e.mjs --no-claude # a real server on a scratch port, end to end
+node dev/serve.mjs           # the pages with a chrome.* stub, for styling
 ```
 
-It's enforced twice: Slack refuses anything outside the token's scopes, and the
-connector only runs the queries your choice allows, so a token that turns out
-broader than you meant still isn't used that way.
+The server is Go standard library only. The pages are plain HTML, CSS and ES modules, no build step, embedded into the binary at build time; when run from the source tree the copies on disk win, so a CSS change needs no rebuild. `POMONA_DEBUG_PROMPT=<dir>` writes each morning's prompt to disk on a local server, for reading what the model was given.
 
-Create the app **in a workspace, not an organisation**. If `slack login` put you
-at organisation level, use the link rather than `--create`, and pick your
-workspace from the dropdown. An org-owned app can't be installed to a single
-workspace, and `org_deploy_enabled` cannot be turned off once set.
+## Releasing
 
-## Prompt injection
+`VERSION` is the one place the version lives. `node dev/release.mjs bump x.y.z` copies it into the manifest and the server, commits and tags; pushing the tag builds the binaries, zips the extension and publishes the release, while Orchard redeploys `master`. The steps are in [docs/RELEASING.md](docs/RELEASING.md).
 
-Everything a source returns is untrusted: a Slack message or an issue title can
-carry text aimed at the model. Items are delimited and labelled as data, the
-system prompt says to report instructions rather than follow them, and the
-renderer never puts model output through `innerHTML`.
+## License
 
-The server also runs Claude with **every built-in tool disabled**. This matters
-more than it sounds: an empty allow-list does *not* disable them. Measured, the
-model reached for Bash and ran `gh` against a real PR. Each tool is named in
-`--disallowed-tools`, and `--setting-sources ""` keeps your CLAUDE.md, project
-settings and MCP servers out of the brief.
-
-## Working on it
-
-```bash
-go test ./server/...                      # vault, pairing, ICS
-node dev/check.mjs                        # extension preflight
-node dev/e2e.mjs                          # the whole thing, against a real server
-go build -o /tmp/pomona ./server && /tmp/pomona &
-node dev/make-preview.mjs && node dev/serve.mjs
-```
-
-The previews are the real extension pages talking to a real server over the same
-HTTP API; only `chrome.*` is stubbed. Serve them rather than opening off disk,
-since they're ES modules.
-
-Editing the brief or options page needs a refresh. Editing `src/background.js`
-needs the reload button on the extension card. Editing the server needs a
-rebuild.
-
-## Design
-
-Orchard's crimson and warm greige, set classically: Didot for the plate titles,
-Optima (drawn from Greek inscription) for anything in capitals, Roman numerals
-on the movements, a running meander between them, laurel where something's been
-won. Greek letterforms stand in for Latin ones in display capitals only
-(`TØP TØ-DØS`), never in the brief's own words, which stay searchable.
-
-Plates come from the Cleveland Museum of Art's open access collection: CC0, no
-key, one per day, chosen deterministically so regenerating doesn't reshuffle the
-art.
+MIT.
