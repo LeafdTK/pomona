@@ -76,7 +76,19 @@ async function boot() {
 
   const wanted = new URLSearchParams(location.search).get("id");
   const summary = (wanted && briefs.find((b) => b.id === wanted)) || briefs[0];
-  if (!summary) return showBlank();
+  if (!summary) {
+    // Nothing written, and the last attempt failed: say why, in the
+    // server's words, rather than a blank page that invites another try.
+    if (running?.stage === "failed" && running.kind !== "refresh" && running.error) {
+      showBlank();
+      const blankStatus = $("blankStatus");
+      blankStatus.classList.add("is-error");
+      setText(blankStatus, `The last attempt failed: ${running.error}`);
+      $("blankGenerate").textContent = "Try again";
+      return;
+    }
+    return showBlank();
+  }
 
   current = await getBrief(summary.id);
   await render(current);
