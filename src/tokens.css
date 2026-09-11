@@ -1,0 +1,71 @@
+/* ============================================================
+   Pomona — goddess of orchards, keeper of the day's fruit.
+   Orchard's crimson and warm greige, dressed classically:
+   Didot for the plate titles, Optima (drawn from Greek
+   inscription) for anything set in capitals, Avenir for prose.
+   Shared by the brief, the options page, and the popup.
+   ============================================================ */
+
+:root {
+  --bg: #efece6;
+  --surface: #f8f6f2;
+  --surface-sunk: #e9e5dd;
+  --crimson: #b0394a;
+  --crimson-deep: #8e2c3b;
+  --crimson-wash: rgba(176, 57, 74, 0.07);
+  --on-crimson: #fdf8f4;
+  --ink: #1f1d1b;
+  --ink-soft: rgba(31, 29, 27, 0.62);
+  --ink-faint: rgba(31, 29, 27, 0.36);
+  --hair: rgba(31, 29, 27, 0.11);
+  --gilt: #a8874e;
+
+
+  /* Didot: the high-contrast Didone that makes a page look engraved. */
+  --display: Didot, "Bodoni 72", "Playfair Display", "Times New Roman", Georgia, serif;
+  /* Optima's flared stems come straight off Greek stone-cut capitals. */
+  --classical: Optima, "Gill Sans", "Gill Sans MT", Candara, "Avenir Next", sans-serif;
+  --sans: "Avenir Next", Avenir, "Nunito Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", "IBM Plex Mono", "Roboto Mono", Menlo, monospace;
+
+  --radius-lg: 22px;
+  --radius: 16px;
+  --radius-sm: 11px;
+  --shadow: 0 24px 48px -34px rgba(31, 29, 27, 0.45), 0 2px 6px -3px rgba(31, 29, 27, 0.1);
+
+  /* Every title in the brief starts at --rail + --rail-gap from the content
+     edge: section headings, to-do titles, update titles. One vertical line. */
+  --rail: 27px;
+  --rail-gap: 16px;
+
+  --measure: 1080px;
+  --gutter: clamp(20px, 5vw, 72px);
+  --step: clamp(34px, 4.4vw, 58px);
+
+  /* A running meander, tiled horizontally. Used as a rule between movements.
+     The -v variant is the same key turned a quarter, for framing a panel. */
+  --meander: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='26' viewBox='0 0 30 26'%3E%3Cpath d='M0 25h30M2 25V2h21v18H9V9h9v7' fill='none' stroke='%23b0394a' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
+  --meander-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='30' viewBox='0 0 26 30'%3E%3Cpath transform='translate(26 0) rotate(90)' d='M0 25h30M2 25V2h21v18H9V9h9v7' fill='none' stroke='%23b0394a' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17161a;
+    --surface: #201f25;
+    --surface-sunk: #1b1a1f;
+    --crimson: #d2596a;
+    --crimson-deep: #b0394a;
+    --crimson-wash: rgba(210, 89, 106, 0.12);
+    --on-crimson: #fdf8f4;
+    --ink: #efeae4;
+    --ink-soft: rgba(239, 234, 228, 0.62);
+    --ink-faint: rgba(239, 234, 228, 0.34);
+    --hair: rgba(239, 234, 228, 0.13);
+    --gilt: #c9a76a;
+
+    --shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.8);
+
+    --meander: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='26' viewBox='0 0 30 26'%3E%3Cpath d='M0 25h30M2 25V2h21v18H9V9h9v7' fill='none' stroke='%23d2596a' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
+    --meander-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='30' viewBox='0 0 26 30'%3E%3Cpath transform='translate(26 0) rotate(90)' d='M0 25h30M2 25V2h21v18H9V9h9v7' fill='none' stroke='%23d2596a' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
+  }
+}

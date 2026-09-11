@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomona</title>
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- One shell for every step. Steps do not replace it, they change what it
+       holds and how big it is, so moving between them reads as one thing
+       turning over rather than four pages taking turns. -->
+  <main class="stage" id="stage">
+    <div class="shell" id="shell">
+      <header class="brand">
+        <span class="brand__mark blossom" data-blossom aria-hidden="true"></span>
+        <span class="brand__name">Pomona</span>
+      </header>
+
+      <div class="pane" id="pane"></div>
+
+      <footer class="progress" id="progress" aria-hidden="true"></footer>
+    </div>
+  </main>
+
+  <!-- ── Steps ─────────────────────────────────────────── -->
+
+  <template id="step-welcome">
+    <div class="step">
+      <p class="step__kicker">One page, every morning</p>
+      <h1 class="step__title">Good morning.<br>Let's make you a brief.</h1>
+      <p class="step__body">
+        Pomona reads what you already have open, Slack, GitHub, your calendar, and writes
+        one page about your day. It runs on your machine, and it forgets almost everything.
+      </p>
+      <div class="step__actions">
+        <button type="button" class="btn btn--primary" data-next>Start</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="step-you">
+    <div class="step">
+      <p class="step__kicker">Who it's writing to</p>
+      <h1 class="step__title">Tell it who you are.</h1>
+      <p class="step__body">
+        A brief written to a person beats one written to an inbox. None of this leaves
+        your machine.
+      </p>
+      <div class="fields">
+        <label class="field">
+          <span class="field__label">Your name</span>
+          <input type="text" id="name" autocomplete="given-name" placeholder="Sebastian">
+        </label>
+        <label class="field">
+          <span class="field__label">What you do</span>
+          <input type="text" id="role" placeholder="Infra, Hack Club">
+        </label>
+        <label class="field field--wide">
+          <span class="field__label">What you're in the middle of</span>
+          <textarea id="focus" rows="2" placeholder="Shipping Orchard v2.26. Trying to stop paging myself at 3am."></textarea>
+        </label>
+      </div>
+      <div class="step__actions">
+        <button type="button" class="btn" data-back>Back</button>
+        <button type="button" class="btn btn--primary" data-next>Next</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="step-sources">
+    <div class="step">
+      <p class="step__kicker">What it reads</p>
+      <h1 class="step__title">Give it something to read.</h1>
+      <p class="step__body">
+        One is enough to start. You can add the rest later, and take any of them
+        away without losing anything.
+      </p>
+      <ul class="picks" id="picks"></ul>
+      <div class="step__actions">
+        <button type="button" class="btn" data-back>Back</button>
+        <button type="button" class="btn btn--primary" data-next>Next</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="step-when">
+    <div class="step">
+      <p class="step__kicker">When it lands</p>
+      <h1 class="step__title">Pick a morning time.</h1>
+      <p class="step__body">
+        It writes once a day, a little before you want to read it. Reading Slack
+        properly takes a few minutes, so it starts early and waits for you.
+      </p>
+      <div class="fields">
+        <label class="field">
+          <span class="field__label">Write it at</span>
+          <input type="time" id="time" value="07:30">
+        </label>
+        <label class="field field--check">
+          <input type="checkbox" id="weekdays" checked>
+          <span>Weekdays only</span>
+        </label>
+      </div>
+      <div class="step__actions">
+        <button type="button" class="btn" data-back>Back</button>
+        <button type="button" class="btn btn--primary" data-next>Next</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="step-done">
+    <div class="step step--done">
+      <p class="step__kicker">Ready</p>
+      <h1 class="step__title" id="doneTitle">That's everything.</h1>
+      <p class="step__body" id="doneBody">
+        Pomona will write tomorrow's on its own. You can have today's now, if you like:
+        it takes a few minutes, and it shows you the plate while it works.
+      </p>
+      <div class="step__actions">
+        <button type="button" class="btn btn--primary" id="writeNow">Write today's now</button>
+        <button type="button" class="btn" id="later">I'll wait for tomorrow</button>
+      </div>
+      <p class="step__status" id="status"></p>
+    </div>
+  </template>
+
+  <template id="tpl-pick">
+    <li class="pick">
+      <button type="button" class="pick__button">
+        <span class="pick__mark" aria-hidden="true"></span>
+        <span class="pick__main">
+          <span class="pick__name"></span>
+          <span class="pick__blurb"></span>
+        </span>
+        <span class="pick__state"></span>
+      </button>
+    </li>
+  </template>
+
+  <script type="module" src="welcome.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pomona</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="pop">
+    <header class="pop__head">
+      <span class="pop__mark blossom" data-blossom></span>
+      <span class="pop__name">Pomona</span>
+      <span class="pop__when" id="when"></span>
+    </header>
+
+    <p class="pop__line" id="line">Loading…</p>
+
+    <div class="pop__actions">
+      <button type="button" class="btn btn--primary" id="primary">Open today's brief</button>
+      <button type="button" class="btn" id="write">Rewrite</button>
+    </div>
+
+    <ul class="pop__sources" id="sources"></ul>
+
+    <button type="button" class="pop__settings" id="settings">Sources &amp; settings</button>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

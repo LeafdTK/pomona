@@ -1,0 +1,102 @@
+@import url("../tokens.css");
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  width: 320px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pop { padding: 18px; }
+
+.pop__head { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.pop__mark { width: 20px; height: 20px; flex: none; color: var(--crimson); }
+.pop__mark svg { width: 100%; height: 100%; display: block; }
+
+.pop__name {
+  font-family: var(--classical);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.pop__when {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.pop__line { margin: 0 0 16px; color: var(--ink-soft); font-size: 13px; }
+.pop__line.is-error { color: var(--crimson); }
+
+.pop__actions { display: flex; gap: 8px; }
+
+.btn {
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: color 0.18s, background 0.18s;
+}
+
+.btn:hover:not(:disabled) { color: var(--ink); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn--primary { flex: 2; background: var(--crimson); border-color: var(--crimson); color: var(--on-crimson); }
+.btn--primary:hover:not(:disabled) { background: var(--crimson-deep); color: var(--on-crimson); }
+
+.pop__sources { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+
+.pop__sources li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.pop__sources li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--crimson);
+  opacity: 0.75;
+}
+
+.pop__sources li.is-down { color: var(--crimson); }
+.pop__sources li.is-down::before { background: currentColor; opacity: 1; }
+
+.pop__settings {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  text-align: center;
+  cursor: pointer;
+}
+
+.pop__settings:hover { color: var(--crimson); }

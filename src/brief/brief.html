@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomona</title>
+  <link rel="stylesheet" href="brief.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="page" id="page" hidden>
+  <div class="sheet">
+    <header class="masthead">
+      <span class="masthead__wordmark"><span class="blossom" data-blossom></span><span>Pomona</span></span>
+
+      <nav class="masthead__nav" aria-label="Past briefs">
+        <button type="button" class="chip" id="prevBrief" title="Older brief" aria-label="Older brief">&larr;</button>
+        <span class="masthead__day" id="mastheadDay"></span>
+        <button type="button" class="chip" id="nextBrief" title="Newer brief" aria-label="Newer brief">&rarr;</button>
+      </nav>
+
+      <div class="masthead__actions">
+        <span class="masthead__stamp" id="mastheadTime"></span>
+        <button type="button" class="chip chip--action" id="regenerate">Regenerate</button>
+        <button type="button" class="chip" id="openOptions" title="Sources &amp; settings">Sources</button>
+      </div>
+    </header>
+    <div class="rule rule--double" aria-hidden="true"></div>
+
+    <section class="overture">
+      <figure class="plate" id="plate">
+        <img class="plate__img" id="plateImg" alt="">
+        <h1 class="title">
+          <span class="title__the">The</span>
+          <span class="title__day" id="titleDay">Brief</span>
+        </h1>
+        <span class="plate__flag blossom" data-blossom aria-hidden="true"></span>
+      </figure>
+
+      <div class="overture__foot">
+        <p class="greeting" id="greeting"></p>
+        <figcaption class="plate__caption" id="plateCaption"></figcaption>
+      </div>
+    </section>
+
+    <main class="content" id="content"></main>
+
+    </div>
+
+    <footer class="colophon">
+      <svg class="tide__svg" viewBox="0 0 1440 160" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="currentColor" d="M0,66 C214,6 392,118 690,88 C968,60 1176,142 1440,82 L1440,160 L0,160 Z"/>
+      </svg>
+      <div class="colophon__inner">
+        <div class="colophon__body">
+          <div class="meander meander--inverse" aria-hidden="true"></div>
+          <p class="colophon__line" id="colophonSources"></p>
+          <p class="colophon__line colophon__line--warn" id="colophonGaps" hidden></p>
+          <p class="colophon__line colophon__line--warn" id="colophonModel" hidden></p>
+          <p class="colophon__line colophon__usage" id="colophonUsage" hidden></p>
+          <p class="colophon__line colophon__line--faint" id="colophonPlate"></p>
+          <p class="colophon__ornament" aria-hidden="true"><span class="blossom" data-blossom></span></p>
+          <p class="colophon__sig" aria-hidden="true">Pomona</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Nothing to show yet -->
+  <div class="blank" id="blank" hidden>
+    <div class="blank__inner">
+      <span class="blank__mark blossom" data-blossom aria-hidden="true"></span>
+      <p class="blank__kicker">Pomona</p>
+      <h2 class="blank__title">Nothing has been written for you.</h2>
+      <p class="blank__body" id="blankBody">Connect a source or two, add your Anthropic key, and the first brief takes about a minute.</p>
+      <div class="blank__actions">
+        <button type="button" class="chip chip--action" id="blankGenerate">Write today's brief</button>
+        <button type="button" class="chip" id="blankSetup" hidden>Set Pomona up</button>
+        <button type="button" class="chip" id="blankOptions">Sources &amp; settings</button>
+      </div>
+      <p class="blank__status" id="blankStatus"></p>
+    </div>
+  </div>
+
+  <!-- The press: the same page, before it has been written. Sharing the
+       masthead, the plate and the title means the brief does not arrive, it
+       finishes: nothing moves when the words land. -->
+  <div class="press" id="press" hidden>
+    <div class="sheet">
+      <header class="masthead">
+        <span class="masthead__wordmark"><span class="blossom" data-blossom></span><span>Pomona</span></span>
+        <span class="masthead__day" id="pressDate"></span>
+        <span class="masthead__stamp" id="pressClock"></span>
+      </header>
+      <div class="rule rule--double" aria-hidden="true"></div>
+
+      <section class="overture">
+        <figure class="plate" id="pressPlate" style="--reveal: 0">
+          <img class="plate__img press__layer press__ghost" id="pressGhost" alt="" aria-hidden="true">
+          <img class="plate__img press__layer press__sharp" id="pressImg" alt="">
+          <h1 class="title">
+            <span class="title__the">The</span>
+            <span class="title__day" id="pressDay">Brief</span>
+          </h1>
+          <span class="plate__flag blossom" data-blossom aria-hidden="true"></span>
+        </figure>
+
+        <div class="overture__foot">
+          <p class="greeting" id="pressNote">Waking up your sources</p>
+          <figcaption class="plate__caption" id="pressCaption"></figcaption>
+        </div>
+        <ul class="press__steps" id="pressSteps"></ul>
+      </section>
+    </div>
+  </div>
+
+  <template id="tpl-press-step">
+    <li class="step">
+      <span class="step__name"></span>
+      <span class="step__count"></span>
+    </li>
+  </template>
+
+  <!-- ── Templates ───────────────────────────────────── -->
+
+  <template id="tpl-section">
+    <section class="movement">
+      <div class="movement__head">
+        <span class="movement__index"></span>
+        <h2 class="movement__title"></h2>
+        <span class="movement__rule" aria-hidden="true"></span>
+        <span class="movement__count"></span>
+      </div>
+      <div class="movement__body"></div>
+    </section>
+  </template>
+
+  <template id="tpl-push">
+    <div class="push">
+      <div class="push__body">
+        <h3 class="push__title"></h3>
+        <p class="push__text"></p>
+      </div>
+      <a class="push__seal" href="#" target="_blank" rel="noopener">
+        <span class="push__seal-label">Let's do it</span>
+        <span class="arrow" aria-hidden="true">&rarr;</span>
+      </a>
+    </div>
+  </template>
+
+  <template id="tpl-draft">
+    <div class="draft">
+      <div class="draft__head">
+        <span class="draft__label">A first draft</span>
+        <button type="button" class="draft__copy">Copy</button>
+      </div>
+      <pre class="draft__text"></pre>
+    </div>
+  </template>
+
+  <template id="tpl-todo">
+    <article class="todo">
+      <label class="todo__check">
+        <input type="checkbox">
+        <span class="todo__box" aria-hidden="true">
+          <svg viewBox="0 0 20 20"><path d="M4 10.5 8.2 14.6 16 5.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </label>
+      <div class="todo__main">
+        <p class="todo__label"></p>
+        <h3 class="todo__title"></h3>
+        <p class="todo__body"></p>
+        <p class="todo__actions">
+          <button type="button" class="todo__dismiss">Doesn't look right?</button>
+          <button type="button" class="todo__bury"></button>
+        </p>
+      </div>
+      <a class="todo__source" target="_blank" rel="noopener">
+        <span class="todo__source-name"></span>
+        <span class="arrow" aria-hidden="true">&#8599;</span>
+      </a>
+    </article>
+  </template>
+
+  <template id="tpl-allclear">
+    <div class="allclear" hidden>
+      <span class="allclear__wreath" data-laurel aria-hidden="true"></span>
+      <span class="allclear__stamp">All clear</span>
+      <p class="allclear__note">Everything that was waiting on you is done.</p>
+    </div>
+  </template>
+
+  <template id="tpl-update">
+    <article class="update">
+      <span class="update__index"></span>
+      <div class="update__main">
+        <h3 class="update__title"></h3>
+        <p class="update__body"></p>
+        <ul class="update__bullets"></ul>
+        <footer class="update__meta">
+          <span class="update__when"></span>
+          <a class="update__link" target="_blank" rel="noopener"></a>
+          <button type="button" class="update__mute"></button>
+        </footer>
+      </div>
+    </article>
+  </template>
+
+  <template id="tpl-schedule">
+    <div class="schedule">
+      <div class="schedule__list" role="list"></div>
+      <aside class="schedule__detail" id="scheduleDetail">
+        <p class="schedule__detail-when"></p>
+        <h3 class="schedule__detail-title"></h3>
+        <p class="schedule__detail-note"></p>
+        <a class="schedule__prep" href="#" target="_blank" rel="noopener">Prep me <span class="arrow" aria-hidden="true">&rarr;</span></a>
+      </aside>
+    </div>
+  </template>
+
+  <template id="tpl-schedule-row">
+    <button type="button" class="slot" role="listitem">
+      <span class="slot__time"></span>
+      <span class="slot__title"></span>
+      <span class="slot__next" hidden>Next</span>
+      <span class="slot__leader" aria-hidden="true"></span>
+    </button>
+  </template>
+
+
+  <script type="module" src="brief.js"></script>
+</body>
+</html>

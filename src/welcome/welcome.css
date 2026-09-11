@@ -1,0 +1,297 @@
+@import url("../tokens.css");
+
+/* Onboarding as one object turning over.
+ *
+ * The temptation is four screens that cut between each other, which reads as
+ * paperwork. Instead there is a single shell that stays exactly where it is
+ * while its contents change and its height eases to fit them: the thing you
+ * are looking at is never replaced, only rewritten. That is the whole trick,
+ * and it is why the height transition is the most important line in here. */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: clamp(15px, 0.4vw + 14px, 16.5px);
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.4;
+  mix-blend-mode: multiply;
+  background-image: var(--grain);
+}
+
+.stage {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--gutter);
+}
+
+.shell {
+  position: relative;
+  width: min(620px, 100%);
+  padding: clamp(26px, 4vw, 40px);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+
+  /* The one line that makes this feel like one object: the shell grows and
+     shrinks to whatever step it is holding, rather than jumping. */
+  height: var(--shell-h, auto);
+  transition: height 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+/* ── The mark ──────────────────────────────────────────
+   Present on every step, so the eye has something that does not move while
+   everything around it does. */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: clamp(20px, 3vw, 30px);
+}
+.brand__mark { width: 22px; height: 22px; color: var(--crimson); }
+.brand__name {
+  font-family: var(--classical);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+/* ── Steps ─────────────────────────────────────────────
+   Two steps overlap for the length of one crossfade: the outgoing one is taken
+   out of the flow so it cannot push the incoming one around while it leaves. */
+
+.pane { position: relative; }
+
+.step {
+  transition:
+    opacity 0.38s ease,
+    transform 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.38s ease;
+}
+
+.step.is-entering {
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+  filter: blur(6px);
+}
+
+.step.is-leaving {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.99);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+.step__kicker {
+  margin: 0 0 12px;
+  font-family: var(--classical);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--crimson);
+}
+
+.step__title {
+  margin: 0 0 14px;
+  font-family: var(--display);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.012em;
+}
+
+.step__body {
+  margin: 0 0 26px;
+  max-width: 46ch;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.step__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: clamp(22px, 3vw, 30px);
+}
+
+.step__status {
+  margin: 16px 0 0;
+  min-height: 1.4em;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}
+.step__status.is-error { color: var(--crimson); }
+
+/* ── Fields ────────────────────────────────────────────*/
+
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+.field--wide { grid-column: 1 / -1; }
+
+.field { display: grid; gap: 6px; }
+.field__label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.field input[type="text"],
+.field input[type="time"],
+.field textarea {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 3px var(--crimson-wash);
+}
+
+.field--check {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  align-self: end;
+  padding-bottom: 11px;
+  color: var(--ink-soft);
+}
+.field--check input { width: 16px; height: 16px; accent-color: var(--crimson); }
+
+/* ── Source picks ──────────────────────────────────────*/
+
+.picks { list-style: none; display: grid; gap: 10px; margin: 0; padding: 0; }
+
+.pick__button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.24s ease, background 0.24s ease, transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pick__button:hover { border-color: var(--ink-faint); transform: translateY(-1px); }
+
+.pick__mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--ink-faint);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.pick__main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.pick__name { font-weight: 600; letter-spacing: -0.012em; }
+.pick__blurb { font-size: 0.9em; color: var(--ink-soft); }
+
+.pick__state {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.pick.is-connected .pick__button { border-color: var(--crimson); background: var(--crimson-wash); }
+.pick.is-connected .pick__mark {
+  background: var(--crimson);
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 4px var(--crimson-wash);
+}
+.pick.is-connected .pick__state { color: var(--crimson); }
+
+/* ── Buttons ───────────────────────────────────────────*/
+
+.btn {
+  padding: 11px 20px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, opacity 0.2s ease;
+}
+.btn:hover { transform: translateY(-1px); border-color: var(--ink-faint); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+.btn--primary {
+  border-color: transparent;
+  background: var(--crimson);
+  color: var(--on-crimson);
+}
+.btn--primary:hover { border-color: transparent; }
+
+/* ── Progress ──────────────────────────────────────────
+   Not a bar with a number on it: a row of marks, where the one you are on is
+   wide and the rest are dots. */
+
+.progress {
+  display: flex;
+  gap: 7px;
+  margin-top: clamp(24px, 3.4vw, 34px);
+}
+.progress span {
+  height: 4px;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--ink-faint);
+  opacity: 0.3;
+  transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease, background 0.4s ease;
+}
+.progress span.is-here { width: 26px; opacity: 1; background: var(--crimson); }
+.progress span.is-past { opacity: 0.6; }
+
+@media (max-width: 620px) {
+  .fields { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell { transition: none; }
+  .step, .step.is-entering, .step.is-leaving { transition: none; filter: none; transform: none; }
+  .progress span { transition: none; }
+}

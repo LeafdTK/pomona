@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomona: sources &amp; settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="wrap">
+    <header class="head">
+      <span class="head__mark blossom" data-blossom></span>
+      <div>
+        <h1 class="head__title">Pomona</h1>
+        <p class="head__sub">One page every morning, written from what you're actually in the middle of.</p>
+      </div>
+      <span class="head__actions">
+        <button type="button" class="btn" id="toBrief">The brief</button>
+        <button type="button" class="btn btn--primary" id="generateNow">Write one now</button>
+      </span>
+    </header>
+
+    <section class="card" id="connectionCard">
+      <h2 class="card__title">Your server</h2>
+      <p class="card__note" id="connectionNote">Looking for your Pomona server…</p>
+
+      <div class="row">
+        <label class="field field--wide">
+          <span class="field__label">Server address</span>
+          <input type="url" id="serverUrl" placeholder="http://127.0.0.1:7777" spellcheck="false">
+        </label>
+        <div class="field field--action">
+          <button type="button" class="btn" id="recheck">Check again</button>
+          <span class="result" id="connectionResult"></span>
+        </div>
+      </div>
+
+      <div id="setupPane" hidden>
+        <p class="card__note card__note--tight">
+          Choose a passphrase. Everything the server stores is encrypted with it: your briefs, your
+          source tokens, all of it. There is no way to recover it, so keep it somewhere.
+        </p>
+        <div class="row">
+          <label class="field">
+            <span class="field__label">New passphrase</span>
+            <input type="password" id="newPassphrase" autocomplete="new-password">
+          </label>
+          <div class="field field--action">
+            <button type="button" class="btn btn--primary" id="createVault">Create the vault</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="unlockPane" hidden>
+        <div class="row">
+          <label class="field">
+            <span class="field__label">Passphrase</span>
+            <input type="password" id="passphrase" autocomplete="current-password">
+          </label>
+          <div class="field field--action">
+            <button type="button" class="btn btn--primary" id="unlock">Unlock</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="signinPane" hidden>
+        <p class="card__note card__note--tight" id="signinNote"></p>
+        <div class="row">
+          <label class="field">
+            <span class="field__label">Email</span>
+            <input type="email" id="email" autocomplete="username">
+          </label>
+          <label class="field">
+            <span class="field__label">Password</span>
+            <input type="password" id="password" autocomplete="current-password">
+          </label>
+          <div class="field field--action">
+            <button type="button" class="btn btn--primary" id="signin">Sign in</button>
+            <button type="button" class="btn" id="createAccount">Create an account</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pairPane" hidden>
+        <p class="card__note card__note--tight">
+          Your server is showing a six digit code in its terminal, the way a television does.
+          Type it here once and this browser is paired for good.
+        </p>
+        <div class="row">
+          <label class="field field--narrow">
+            <span class="field__label">Pairing code</span>
+            <input type="text" id="pairCode" inputmode="numeric" maxlength="6" placeholder="000000" spellcheck="false">
+          </label>
+          <div class="field field--action">
+            <button type="button" class="btn btn--primary" id="pair">Pair this browser</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pairedPane" hidden>
+        <div class="row">
+          <div class="field field--action">
+            <button type="button" class="btn" id="readAgain" title="Read every source into the store now, without writing a brief">Read sources now</button>
+            <button type="button" class="btn" id="signout">Sign out</button>
+            <button type="button" class="btn" id="signoutOthers">Sign out other browsers</button>
+            <button type="button" class="btn" id="lockServer">Lock the server</button>
+            <button type="button" class="btn btn--quiet" id="forgetAll">Delete my briefs</button>
+          </div>
+        </div>
+        <p class="card__note card__note--tight card__note--aside">
+          Every paired browser holds a key to this account. Signing the others out ends them all
+          and leaves this one working. Deleting your briefs removes every stored page and note for
+          this account. Pomona keeps only the last few days anyway, and never stores the raw
+          messages it read.
+        </p>
+      </div>
+    </section>
+
+    <section class="card" id="memoryCard" data-needs-pairing hidden>
+      <h2 class="card__title">What Pomona remembers</h2>
+      <p class="card__note">
+        Notes it kept from past mornings, stored in this browser and nowhere else.
+        They go into each new brief so it can tell what you cleared from what you've
+        been carrying all week. Delete anything you'd rather it forgot.
+      </p>
+      <ul class="memory" id="memory"></ul>
+    </section>
+
+    <section class="card" id="ownedCard" data-needs-pairing hidden>
+      <h2 class="card__title">What you own</h2>
+      <p class="card__note">
+        Worked out from where you post, what you merge, and what you made, and
+        recomputed every morning. A question in one of these with no answer is
+        yours to answer. Nothing here is asked for; anything wrong is one click
+        to take back.
+      </p>
+      <ul class="memory" id="owned"></ul>
+      <div class="field field--action">
+        <input type="text" id="ownInput" placeholder="#a-channel or owner/repo" autocomplete="off">
+        <button type="button" class="btn" id="ownAdd">This is mine too</button>
+      </div>
+    </section>
+
+    <section class="card" id="mutesCard" data-needs-pairing hidden>
+      <h2 class="card__title">Places you've silenced</h2>
+      <p class="card__note">
+        Channels and repositories Pomona stops reading altogether. Silencing happens
+        before anything is gathered, so a muted place costs nothing and can never
+        argue its way back into a brief. Direct messages can't be silenced.
+      </p>
+      <ul class="memory" id="mutes"></ul>
+
+      <p class="card__note card__note--tight" id="fadedNote" hidden>
+        These faded on their own. Pomona showed them to you every morning for weeks
+        and you never once opened, ticked or acted on one, so it stopped gathering
+        them. Bring any of them back and it starts over with a clean slate.
+      </p>
+      <ul class="memory" id="faded"></ul>
+    </section>
+
+    <section class="card" data-needs-pairing hidden>
+      <h2 class="card__title" id="connectingApps">Connecting apps</h2>
+      <p class="card__note">
+        Do this once and everyone on this server connects Slack with a click, with no tokens to copy.
+        Open your Slack app's <strong>Basic Information</strong> page, add the redirect URL below
+        under OAuth &amp; Permissions, then paste the two values from App Credentials.
+        Slack has no API for these, which is why it's the one thing you have to copy by hand.
+      </p>
+      <label class="field">
+        <span class="field__label">Redirect URL to add to your Slack app</span>
+        <input type="text" id="redirectURI" readonly spellcheck="false">
+      </label>
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Client ID</span>
+          <input type="text" id="slackClientId" spellcheck="false" placeholder="1234567890.1234567890">
+        </label>
+        <label class="field">
+          <span class="field__label">Client secret</span>
+          <input type="password" id="slackClientSecret" spellcheck="false" placeholder="leave blank to keep the current one">
+        </label>
+        <div class="field field--action">
+          <button type="button" class="btn" id="saveSlackApp">Save</button>
+          <span class="result" id="slackAppResult"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" data-needs-pairing hidden>
+      <h2 class="card__title">Sources</h2>
+      <p class="card__note">Everything is read-only, stored locally, and sent only to Claude when the brief is written.</p>
+      <div id="connectors"></div>
+    </section>
+
+    <section class="card" data-needs-pairing hidden>
+      <h2 class="card__title">You</h2>
+      <p class="card__note">Claude writes to a person, not an inbox. Most of this is read from what you connected, so it should already be right. Fix anything that isn't.</p>
+      <p class="card__note card__note--tight" id="guessNote" hidden></p>
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input type="text" id="name" placeholder="Sebastian" autocomplete="off">
+        </label>
+        <label class="field">
+          <span class="field__label">Role</span>
+          <input type="text" id="role" placeholder="Infra, Hack Club" autocomplete="off">
+        </label>
+      </div>
+      <label class="field">
+        <span class="field__label">What you're in the middle of</span>
+        <textarea id="focus" rows="4" placeholder="Shipping Orchard v2.26. I care about anything blocking a deploy and anything Zach or Rebeka asks for directly. Dependabot noise can wait."></textarea>
+        <span class="field__help">The one thing no source can tell it. What matters this month, and what to ignore.</span>
+      </label>
+    </section>
+
+    <section class="card" data-needs-pairing hidden>
+      <h2 class="card__title">Anything else</h2>
+      <p class="card__note">
+        Any URL that returns JSON, RSS, or text: a status page, a changelog, a Notion query, your own API.
+        Give it a name and Claude gets it as one more labelled source.
+      </p>
+      <div id="customList"></div>
+      <button type="button" class="btn" id="addCustom">Add a source</button>
+    </section>
+
+    <section class="card" data-needs-pairing hidden>
+      <h2 class="card__title">Claude</h2>
+      <p class="card__note">
+        The server runs Claude for you. On a subscription it drives your local Claude Code, so every
+        model is available and your plan covers it. With an API key it calls the Messages API instead.
+      </p>
+      <div class="row">
+        <label class="field">
+          <span class="field__label">How to pay for it</span>
+          <select id="claudeMode">
+            <option value="subscription">Your Claude subscription</option>
+            <option value="apikey">An Anthropic API key</option>
+          </select>
+        </label>
+        <label class="field field--model">
+          <span class="field__label">Model</span>
+          <select id="model">
+            <option value="claude-opus-5">Claude Opus 5 (best judgement)</option>
+            <option value="claude-sonnet-5">Claude Sonnet 5 (cheaper, quick)</option>
+            <option value="claude-haiku-4-5">Claude Haiku 4.5 (cheapest)</option>
+          </select>
+        </label>
+        <label class="field" id="apiKeyField" hidden>
+          <span class="field__label">API key</span>
+          <input type="password" id="apiKey" placeholder="sk-ant-…" spellcheck="false">
+        </label>
+      </div>
+    </section>
+
+    <section class="card" data-needs-pairing hidden>
+      <h2 class="card__title">Every morning</h2>
+      <div class="row">
+        <label class="field field--inline">
+          <input type="checkbox" id="scheduleEnabled">
+          <span>Write it automatically</span>
+        </label>
+        <label class="field">
+          <span class="field__label">At</span>
+          <input type="time" id="scheduleTime">
+        </label>
+        <label class="field field--inline">
+          <input type="checkbox" id="weekdaysOnly">
+          <span>Weekdays only</span>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field field--inline">
+          <input type="checkbox" id="openTab">
+          <span>Open it in a background tab</span>
+        </label>
+        <label class="field field--inline">
+          <input type="checkbox" id="notify">
+          <span>Notify me when it's ready</span>
+        </label>
+        <label class="field">
+          <span class="field__label">Look back over</span>
+          <select id="lookback">
+            <option value="12">12 hours</option>
+            <option value="24">24 hours</option>
+            <option value="48">2 days</option>
+            <option value="72">3 days</option>
+          </select>
+        </label>
+      </div>
+      <p class="card__note" id="nextRun"></p>
+    </section>
+
+    <footer class="foot">
+      <span class="foot__saved" id="saved"></span>
+    </footer>
+  </div>
+
+  <template id="tpl-connector">
+    <div class="connector">
+      <div class="connector__head">
+        <span class="connector__mark"></span>
+        <div class="connector__meta">
+          <h3 class="connector__name"></h3>
+          <p class="connector__blurb"></p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" class="connector__toggle">
+          <span class="switch__track" aria-hidden="true"><span class="switch__knob"></span></span>
+        </label>
+      </div>
+      <div class="connector__body" hidden>
+        <p class="connector__help"></p>
+        <div class="connector__fields"></div>
+        <div class="connector__actions">
+          <button type="button" class="btn connector__test">Test</button>
+          <span class="result connector__result"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-custom">
+    <div class="custom">
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input type="text" data-key="name" placeholder="Status page">
+        </label>
+        <label class="field field--wide">
+          <span class="field__label">URL</span>
+          <input type="url" data-key="url" placeholder="https://…">
+        </label>
+        <label class="field field--narrow">
+          <span class="field__label">Method</span>
+          <select data-key="method">
+            <option>GET</option>
+            <option>POST</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Headers (JSON)</span>
+          <input type="text" data-key="headers" placeholder='{"Authorization": "Bearer …"}' spellcheck="false">
+        </label>
+        <label class="field">
+          <span class="field__label">Body</span>
+          <input type="text" data-key="body" placeholder="POST body, if any" spellcheck="false">
+        </label>
+        <label class="field field--narrow">
+          <span class="field__label">Items at</span>
+          <input type="text" data-key="itemsPath" placeholder="data.items" spellcheck="false">
+        </label>
+      </div>
+      <div class="custom__actions">
+        <button type="button" class="btn custom__test">Test</button>
+        <button type="button" class="btn btn--quiet custom__remove">Remove</button>
+        <span class="result custom__result"></span>
+      </div>
+    </div>
+  </template>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
