@@ -16,7 +16,7 @@ export async function connection() {
 }
 
 /** Whether this page runs inside the extension, rather than served by the server. */
-export const inExtension = () => typeof chrome !== "undefined" && Boolean(chrome.runtime?.id);
+export const inExtension = () => !globalThis.__pomonaServed && typeof chrome !== "undefined" && Boolean(chrome.runtime?.id);
 
 export async function setConnection(patch) {
   const next = { ...(await connection()), ...patch };

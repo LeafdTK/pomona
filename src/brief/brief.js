@@ -1,5 +1,5 @@
 import { sourceMark, paintBlossoms, paintLaurels } from "./icons.js";
-import { listBriefs, getBrief, generate, briefProgress, plate, setDone, remember, mute, noteAttention, getConfig, status } from "../lib/api.js";
+import { listBriefs, getBrief, generate, briefProgress, plate, setDone, remember, mute, noteAttention, getConfig, status, inExtension } from "../lib/api.js";
 
 const CLAUDE_CHAT = "https://claude.ai/new";
 
@@ -76,9 +76,10 @@ async function boot() {
 
 /** Turn the server's state into the one sentence that tells you what to do. */
 function explain(state) {
-  // Served by a hosted server to a browser that has not signed in: the
-  // setup page is the front door, not a dead end that names the settings.
-  if (!chrome.runtime?.id && state.reachable && !state.paired && !state.local) {
+  // Served by the server to a browser that is not signed in: the setup page
+  // is the front door, not a dead end that names the settings. Whatever the
+  // server thinks about where the browser is.
+  if (!inExtension() && state.reachable && !state.paired && !state.locked && !state.needsSetup) {
     location.replace("/welcome");
     return "";
   }
@@ -99,7 +100,7 @@ function wireChrome() {
   $("regenerate").addEventListener("click", regenerate);
   $("blankGenerate").addEventListener("click", regenerate);
   $("blankSetup").addEventListener("click", () => {
-    location.href = chrome.runtime?.id ? chrome.runtime.getURL("src/welcome/welcome.html") : "/welcome";
+    location.href = inExtension() ? chrome.runtime.getURL("src/welcome/welcome.html") : "/welcome";
   });
   for (const id of ["openOptions", "blankOptions"]) {
     $(id).addEventListener("click", () => chrome.runtime.openOptionsPage());

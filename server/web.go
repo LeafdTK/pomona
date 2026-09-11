@@ -19,6 +19,8 @@ import (
 // pages, one design, two ways to reach it.
 const chromeShim = `<script>
 (() => {
+  // Pages can tell whether the server or the extension is serving them.
+  window.__pomonaServed = true;
   const read = () => { try { return JSON.parse(localStorage.getItem("pomona") ?? "{}"); } catch { return {}; } };
   const write = (v) => localStorage.setItem("pomona", JSON.stringify(v));
 
@@ -75,6 +77,9 @@ func (s *Server) webRoutes(mux *http.ServeMux) {
 	files := http.FileServer(http.FS(assets()))
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		// Every deploy must take effect on the next load: nothing served here
+		// is worth a browser keeping a stale copy of.
+		w.Header().Set("Cache-Control", "no-cache")
 		switch r.URL.Path {
 		case "/":
 			s.page(w, "src/brief/brief.html", "src/brief/")
