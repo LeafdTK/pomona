@@ -33,7 +33,7 @@ The extension is optional. It adds exactly two things: it opens the brief in a t
 
 1. Download `pomona-extension-<version>.zip` from the [latest release](https://github.com/LeafdTK/pomona/releases), unzip it, open `chrome://extensions`, turn on Developer mode, **Load unpacked**, pick the folder.
 2. The setup page opens on its own. Choose **pomona.leafd.dev**, press Connect: a small window signs you in with Slack or with a code sent to your email, and closes.
-3. Decide how much of Slack it may read (Slack itself enforces the tier), tick anything it must never read, paste an Anthropic API key, pick the hour. Name, role and timezone are read from what you connected.
+3. Decide how much of Slack it may read (Slack itself enforces the tier), tick anything it must never read, give it your Claude (a `claude setup-token` token keeps you on your subscription; an API key works too), pick the hour. Name, role and timezone are read from what you connected.
 
 ![What it may read](docs/screenshots/welcome-read.png)
 
@@ -89,7 +89,9 @@ docker run -p 7777:7777 -v pomona-data:/data \
 
 Put it behind anything that terminates TLS and sets `X-Forwarded-Proto`. The hosted instance runs on Hack Club's Orchard from this repository's `master` with auto-deploy on push; see [docs/RELEASING.md](docs/RELEASING.md).
 
-A hosted server cannot use anyone's Claude subscription, so each account brings an Anthropic API key. On a machine with Claude Code signed in, the subscription is used and there is nothing to paste.
+The image carries Claude Code, so a hosted account can stay on its own subscription: run `claude setup-token` on your machine, paste what it prints in the Claude step, and the server runs a Claude Code process with that token for your briefs alone. Or paste an Anthropic API key instead. On your own machine with Claude Code signed in, there is nothing to paste.
+
+User-supplied URLs (custom sources, calendar links) are fetched through a guarded client on a hosted server: anything that resolves to loopback, a private range, link-local or the cluster's own names is refused, before and after DNS.
 
 ## Development
 

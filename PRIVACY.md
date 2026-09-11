@@ -26,7 +26,7 @@ Channels you tick as off limits are never fetched at all. Direct messages are re
 - **Signals.** Clipped excerpts of what it read, at most five hundred characters for a message and about two hundred per line of a conversation, so tomorrow can tell what is new from what it already saw. Deleted three days after they were last seen. Slack user ids are turned into names before storage; the member list is never stored.
 - **Briefs.** The pages it wrote, for as many days as you choose in settings. Seven by default, thirty at most.
 - **Notes.** Up to two dozen short notes it learned across mornings, and what you told it to forget. All visible and deletable in settings.
-- **Tokens.** Your source tokens and your Anthropic key, in your account's own encrypted file.
+- **Tokens.** Your source tokens and your Anthropic key or Claude Code token, in your account's own encrypted file. A Claude Code token is handed to a Claude Code process that runs for your brief alone, through its environment, never written to disk.
 
 Every one of those files is encrypted at rest with AES-256-GCM under a key derived per account from the server's master key. On a hosted server the master key lives in the process environment, not on the disk beside the data.
 
