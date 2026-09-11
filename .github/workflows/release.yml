@@ -1,0 +1,54 @@
+name: release
+
+# A tag is a release. The server is built for the four platforms people run
+# it on, the extension is zipped from a clean list, and both go on the
+# GitHub release with that version's notes from the changelog.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: check the version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          file="$(cat VERSION)"
+          [ "$tag" = "$file" ] || { echo "tag v$tag but VERSION says $file"; exit 1; }
+          node dev/check.mjs
+
+      - name: test
+        run: go test ./server/
+
+      - name: build the server
+        run: |
+          mkdir -p dist
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/pomona-$os-$arch" ./server
+          done
+
+      - name: zip the extension
+        run: node dev/release.mjs zip "dist/pomona-extension-$(cat VERSION).zip"
+
+      - name: release notes
+        run: node dev/release.mjs notes "$(cat VERSION)" > dist/notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: dist/notes.md
+          files: |
+            dist/pomona-*

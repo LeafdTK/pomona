@@ -18,18 +18,25 @@
  */
 
 /**
- * Slack's granular search scopes, so the app can only see the slice you chose.
- * These mirror ScopesFor() in server/source_slack.go.
+ * The user scopes each tier needs. These mirror ScopesFor() in
+ * server/source_slack.go, which is the source of truth: reading histories
+ * honours the narrow scopes, and search:read is asked for on the widest tier
+ * only, because search.messages refuses anything narrower.
  */
+const BASE = ["users:read", "channels:read", "channels:history"];
+const DMS = ["im:read", "im:history", "mpim:read", "mpim:history"];
+const PRIVATE = ["groups:read", "groups:history"];
 const TIERS = {
-  public: { scopes: ["search:read.public"], says: "public channels" },
-  dms: { scopes: ["search:read.public", "search:read.im", "search:read.mpim"], says: "public channels and DMs" },
-  private: { scopes: ["search:read.public", "search:read.private"], says: "public and private channels" },
-  all: {
-    scopes: ["search:read.public", "search:read.im", "search:read.mpim", "search:read.private", "search:read.files"],
-    says: "everything you can see",
-  },
+  public: { scopes: BASE, says: "public channels" },
+  dms: { scopes: [...BASE, ...DMS], says: "public channels and DMs" },
+  private: { scopes: [...BASE, ...PRIVATE], says: "public and private channels" },
+  all: { scopes: [...BASE, ...DMS, ...PRIVATE, "search:read"], says: "everything you can see" },
 };
+
+// Where Slack may send people back. Local always; a hosted server too, if
+// named: `node dev/slack-app.mjs all --host pomona.leafd.dev`.
+const hostArg = process.argv.indexOf("--host");
+const hosted = hostArg > 0 ? process.argv[hostArg + 1] : "";
 
 const tier = process.argv.slice(2).find((a) => a in TIERS) ?? "public";
 const { scopes, says } = TIERS[tier];
@@ -42,7 +49,11 @@ const manifest = {
   },
   oauth_config: {
     // Registered up front so there's nothing to add by hand afterwards.
-    redirect_urls: ["http://127.0.0.1:7777/api/slack/callback", "http://localhost:7777/api/slack/callback"],
+    redirect_urls: [
+      "http://127.0.0.1:7777/api/slack/callback",
+      "http://localhost:7777/api/slack/callback",
+      ...(hosted ? [`https://${hosted}/api/slack/callback`] : []),
+    ],
     scopes: { user: scopes },
   },
   settings: {

@@ -1,0 +1,11 @@
+.git
+.context
+.env
+.env.*
+pomona
+dev
+docs
+*.md
+dev/preview.html
+dev/options.html
+dev/popup.html
