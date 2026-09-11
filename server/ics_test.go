@@ -37,8 +37,11 @@ func TestEventsInWindow(t *testing.T) {
 		"END:VCALENDAR",
 	}, "\r\n")
 
-	from := time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)
-	to := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	// The window carries the reader's zone; an all-day event starts at
+	// their midnight, wherever the server happens to be.
+	denver, _ := time.LoadLocation("America/Denver")
+	from := time.Date(2026, 9, 7, 0, 0, 0, 0, denver)
+	to := time.Date(2026, 9, 10, 0, 0, 0, 0, denver)
 
 	got := EventsInWindow(ics, from, to)
 	seen := map[string]string{}
@@ -46,16 +49,13 @@ func TestEventsInWindow(t *testing.T) {
 		seen[e.Start.UTC().Format("2006-01-02T15:04Z")] = e.Title
 	}
 
-	// An all-day event has no zone of its own: it starts at midnight where
-	// the reader is, which is the process's zone here and UTC on a CI runner.
-	allDay := time.Date(2026, 9, 9, 0, 0, 0, 0, time.Local).UTC().Format("2006-01-02T15:04Z")
 	want := map[string]string{
 		"2026-09-07T09:30Z": "Standup (moved)", // override, not the 07:00 series entry
 		"2026-09-07T08:00Z": "Twice only",
 		"2026-09-08T08:00Z": "Twice only",
 		"2026-09-08T12:00Z": "Monthly review",  // second Tuesday
 		"2026-09-08T17:00Z": "Every other day", // lands exactly on UNTIL day
-		allDay:              "All day offsite",
+		"2026-09-09T06:00Z": "All day offsite", // midnight in Denver
 		"2026-09-09T07:00Z": "Standup",
 	}
 	for at, title := range want {

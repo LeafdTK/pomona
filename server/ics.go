@@ -63,7 +63,11 @@ type icsTime struct {
 
 var dateRe = regexp.MustCompile(`^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?`)
 
-func parseICSTime(value string, params map[string]string) (icsTime, bool) {
+// parseICSTime reads one date or date-time. A value with no zone of its own,
+// a floating time or an all-day date, is read in local, which is the
+// reader's zone: on a hosted server the process clock is UTC and means
+// nothing to anyone.
+func parseICSTime(value string, params map[string]string, local *time.Location) (icsTime, bool) {
 	m := dateRe.FindStringSubmatch(value)
 	if m == nil {
 		return icsTime{}, false
@@ -71,7 +75,10 @@ func parseICSTime(value string, params map[string]string) (icsTime, bool) {
 	num := func(s string) int { n, _ := strconv.Atoi(s); return n }
 	wall := time.Date(num(m[1]), time.Month(num(m[2])), num(m[3]), num(m[4]), num(m[5]), num(m[6]), 0, time.UTC)
 
-	loc := time.Local
+	loc := local
+	if loc == nil {
+		loc = time.Local
+	}
 	if strings.HasSuffix(value, "Z") {
 		loc = time.UTC
 	} else if tzid := params["TZID"]; tzid != "" {
@@ -130,8 +137,8 @@ func parseRRule(value string) rrule {
 		case "COUNT":
 			r.count, _ = strconv.Atoi(val)
 		case "UNTIL":
-			if t, ok := parseICSTime(val, map[string]string{}); ok {
-				r.until, r.hasUntil = t.wall, true
+			if t, ok := parseICSTime(val, map[string]string{}, time.UTC); ok {
+				r.until, r.hasUntil = t.wall, true // wall clock only; the zone is not used
 			}
 		case "BYDAY":
 			for _, token := range strings.Split(val, ",") {
@@ -310,23 +317,23 @@ func EventsInWindow(text string, from, to time.Time) []Event {
 		case "STATUS":
 			cur.status = strings.ToUpper(line.value)
 		case "DTSTART":
-			if t, ok := parseICSTime(line.value, line.params); ok {
+			if t, ok := parseICSTime(line.value, line.params, from.Location()); ok {
 				cur.start = &t
 			}
 		case "DTEND":
-			if t, ok := parseICSTime(line.value, line.params); ok {
+			if t, ok := parseICSTime(line.value, line.params, from.Location()); ok {
 				cur.end = &t
 			}
 		case "RRULE":
 			r := parseRRule(line.value)
 			cur.rule = &r
 		case "RECURRENCE-ID":
-			if t, ok := parseICSTime(line.value, line.params); ok {
+			if t, ok := parseICSTime(line.value, line.params, from.Location()); ok {
 				cur.recurrenceID = &t
 			}
 		case "EXDATE":
 			for _, one := range strings.Split(line.value, ",") {
-				if t, ok := parseICSTime(one, line.params); ok {
+				if t, ok := parseICSTime(one, line.params, from.Location()); ok {
 					cur.exdates[wallKey(t.wall)] = true
 				}
 			}

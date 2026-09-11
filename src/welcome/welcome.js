@@ -197,8 +197,20 @@ async function wire(name, step) {
   if (name === "when") {
     $("time").value = config?.schedule?.time || "07:00";
     $("weekdays").checked = config?.schedule?.weekdaysOnly ?? true;
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setText($("whenBody"), `It starts reading twenty minutes before this, ${zone.replace(/_/g, " ")} time, so the page is finished when you open the browser, whether that is at seven or at quarter past nine.`);
   }
   if (name === "done") finish(step);
+}
+
+/** The reader's zone, from the only clock that is certainly theirs. */
+async function keepZone() {
+  if (!config?.profile) return;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!zone || config.profile.timezone === zone) return;
+  if (config.profile.timezone && !config.profile.inferred?.timezone) return; // they typed one
+  config.profile = { ...config.profile, timezone: zone };
+  await putConfig(config).catch(() => {});
 }
 
 async function save(name) {
@@ -213,6 +225,7 @@ async function save(name) {
   if (name === "never") return saveNever();
   if (name === "claude") return saveClaude();
   if (name === "when" && config) {
+    await keepZone();
     config.schedule = {
       ...config.schedule, enabled: true,
       time: $("time").value || "07:00", weekdaysOnly: $("weekdays").checked,
@@ -271,6 +284,7 @@ async function wireWhere(step) {
       }
       config = await getConfig();
       tier = config?.sources?.slack?.access || tier;
+      await keepZone();
       note("whereStatus", "");
       go(1);
     } catch (error) {
@@ -339,6 +353,7 @@ function wireSignIn(step) {
       // The tier chosen a step ago waits on the account for when Slack is connected.
       config.sources.slack = { ...(config.sources.slack ?? {}), access: tier };
       await putConfig(config).catch(() => {});
+      await keepZone();
       if (mode === "link") return finishLink();
       go(1);
     } catch (error) {
