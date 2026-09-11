@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"encoding/json"
 	"errors"
 	"net"
@@ -592,17 +593,25 @@ func (s *Server) guessProfile(w http.ResponseWriter, r *http.Request, u *UserSto
 	ok(w, GuessProfile(r.Context(), u.Config()))
 }
 
+// generate starts the write and answers at once. A brief takes minutes,
+// nearly all of it reading Slack, and a request held open that long is cut
+// off by any proxy in front of a hosted server. The page polls progress and
+// picks the brief up when the board says it is done.
 func (s *Server) generate(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
-	// The browser has to survive a five minute Slack sweep, so the request is
-	// not tied to the tab: closing it mid-write should not lose the brief.
-	ctx, done := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Minute)
-	defer done()
-	b, err := s.brief.Generate(ctx, u, "manual")
-	if err != nil {
-		fail(w, http.StatusBadGateway, err)
+	if s.brief.Progress(u.ID()).Running() {
+		w.WriteHeader(http.StatusAccepted)
+		ok(w, map[string]any{"started": false, "running": true})
 		return
 	}
-	ok(w, b)
+	go func() {
+		ctx, done := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer done()
+		if _, err := s.brief.Generate(ctx, u, "manual"); err != nil {
+			log.Printf("brief for %s failed: %v", u.ID(), err)
+		}
+	}()
+	w.WriteHeader(http.StatusAccepted)
+	ok(w, map[string]any{"started": true, "running": true})
 }
 
 func (s *Server) setDone(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
@@ -696,16 +705,23 @@ func (s *Server) usage(w http.ResponseWriter, _ *http.Request, u *UserStore, _ *
 	ok(w, out)
 }
 
-// refresh reads every source into the store without writing a brief.
+// refresh reads every source into the store without writing a brief. Like
+// generate, it starts the job and answers; the page polls progress.
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
-	ctx, done := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Minute)
-	defer done()
-	got, err := s.brief.Refresh(ctx, u)
-	if err != nil {
-		fail(w, http.StatusBadGateway, err)
+	if s.brief.Progress(u.ID()).Running() {
+		w.WriteHeader(http.StatusAccepted)
+		ok(w, map[string]any{"started": false, "running": true})
 		return
 	}
-	ok(w, got)
+	go func() {
+		ctx, done := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer done()
+		if _, err := s.brief.Refresh(ctx, u); err != nil {
+			log.Printf("refresh for %s failed: %v", u.ID(), err)
+		}
+	}()
+	w.WriteHeader(http.StatusAccepted)
+	ok(w, map[string]any{"started": true, "running": true})
 }
 
 // signals lists what the store holds, newest first, for looking at. Bodies

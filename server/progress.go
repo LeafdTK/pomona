@@ -38,6 +38,12 @@ type Progress struct {
 	Started time.Time `json:"started"`
 	Signals int       `json:"signals"`
 	Error   string    `json:"error,omitempty"`
+	// What the job produced, once it is done: the brief's id for a write,
+	// a summary for a refresh. The page polls for these rather than holding
+	// a request open for five minutes, which a proxy in front of a hosted
+	// server would cut off at one hundred seconds.
+	BriefID string `json:"briefId,omitempty"`
+	Kind    string `json:"kind,omitempty"` // write | refresh
 }
 
 // Running reports whether a brief is being written right now.
@@ -62,10 +68,10 @@ func (b *progressBoard) For(user string) Progress {
 	return Progress{}
 }
 
-func (b *progressBoard) start(user string) {
+func (b *progressBoard) start(user, kind string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.by[user] = &Progress{Stage: StageReading, Note: "Waking up your sources", Started: time.Now()}
+	b.by[user] = &Progress{Stage: StageReading, Note: "Waking up your sources", Started: time.Now(), Kind: kind}
 }
 
 func (b *progressBoard) edit(user string, change func(*Progress)) {

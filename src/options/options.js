@@ -248,8 +248,16 @@ async function loadEverything(state) {
     button.disabled = true;
     button.textContent = "Reading…";
     try {
-      const got = await api.refresh();
-      flash(`${got.fresh} new, ${got.stored} kept, ${Math.round(got.took / 1e9)}s`);
+      await api.refresh(); // starts the job
+      // Then follow it: the server reads Slack for minutes, and no request
+      // is held open that long.
+      let state;
+      do {
+        await new Promise((r) => setTimeout(r, 2000));
+        state = await api.briefProgress().catch(() => null);
+        if (state?.note) button.textContent = state.note;
+      } while (state && !["done", "failed"].includes(state.stage));
+      flash(state?.stage === "failed" ? state.error : state?.note ?? "Read");
       renderOwned();
     } catch (error) {
       flash(error.message);

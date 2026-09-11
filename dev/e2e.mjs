@@ -101,7 +101,16 @@ try {
   if (withClaude) {
     console.log("\nwriting a brief (this calls Claude for real)");
     const started = Date.now();
-    const { status, body } = await call("/briefs", { method: "POST", token });
+    const kicked = await call("/briefs", { method: "POST", token });
+    check("the write starts and answers at once", kicked.status === 202 && kicked.body.running === true);
+    let progress;
+    do {
+      await sleep(2000);
+      progress = (await call("/briefs/progress", { token })).body;
+    } while (progress?.stage && !["done", "failed"].includes(progress.stage) && Date.now() - started < 15 * 60_000);
+    const { status, body } = progress?.stage === "done"
+      ? await call(`/briefs/${progress.briefId}`, { token })
+      : { status: 500, body: { error: progress?.error ?? "no progress" } };
     if (status !== 200) {
       check("brief written", false, body.error ?? String(status));
     } else {

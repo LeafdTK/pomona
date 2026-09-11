@@ -42,7 +42,7 @@ func (wr *Writer) Generate(ctx context.Context, store *UserStore, trigger string
 	defer wr.mu.Unlock()
 
 	who := store.ID()
-	wr.board.start(who)
+	wr.board.start(who, "write")
 	defer func() {
 		wr.board.edit(who, func(p *Progress) {
 			if err != nil {
@@ -50,6 +50,9 @@ func (wr *Writer) Generate(ctx context.Context, store *UserStore, trigger string
 				return
 			}
 			p.Stage, p.Note = StageDone, "Ready"
+			if brief != nil {
+				p.BriefID = brief.ID
+			}
 		})
 	}()
 
@@ -169,9 +172,22 @@ type Gathered struct {
 // Refresh reads the sources into the store without writing a brief, for the
 // page's "read again" and for anyone who wants the store warm before asking
 // for a brief.
-func (wr *Writer) Refresh(ctx context.Context, store *UserStore) (*Gathered, error) {
+func (wr *Writer) Refresh(ctx context.Context, store *UserStore) (got *Gathered, err error) {
 	wr.mu.Lock()
 	defer wr.mu.Unlock()
+
+	who := store.ID()
+	wr.board.start(who, "refresh")
+	defer func() {
+		wr.board.edit(who, func(p *Progress) {
+			if err != nil {
+				p.Stage, p.Error, p.Note = StageFailed, err.Error(), "Could not read the sources"
+				return
+			}
+			p.Stage = StageDone
+			p.Note = fmt.Sprintf("%d new, %d kept, %ds", got.Fresh, got.Stored, int(got.Took.Seconds()))
+		})
+	}()
 
 	cfg := store.Config()
 	now := cfg.Now()
@@ -179,7 +195,7 @@ func (wr *Writer) Refresh(ctx context.Context, store *UserStore) (*Gathered, err
 	window := windowFor(past, cfg, now)
 	started := time.Now()
 
-	sig, own, err := wr.gather(ctx, store, cfg, window, nil)
+	sig, own, err := wr.gather(ctx, store, cfg, window, watcher{wr.board, who})
 	if err != nil {
 		return nil, err
 	}

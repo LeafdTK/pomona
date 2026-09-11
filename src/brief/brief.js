@@ -60,6 +60,14 @@ async function boot() {
     return showBlank(explain(state));
   }
 
+  // A write already under way, started here or by the morning: show it
+  // being written rather than a blank page that says nothing is.
+  const running = await briefProgress().catch(() => null);
+  if (running?.stage && running.kind !== "refresh" && !["done", "failed"].includes(running.stage)) {
+    openPress();
+    return;
+  }
+
   try {
     briefs = await listBriefs();
   } catch (error) {
@@ -143,9 +151,7 @@ async function offerSetup() {
 async function regenerate() {
   const press = openPress();
   try {
-    const brief = await generate();
-    await press.finish();
-    location.search = `?id=${brief.id}`;
+    await generate(); // starts the job; the press follows it to the end
   } catch (error) {
     press.fail(error.message);
   }
@@ -255,6 +261,16 @@ function openPress() {
     }
     if (stopped || !state?.stage) return;
 
+    if (state.stage === "done") {
+      await finish();
+      location.search = state.briefId ? `?id=${state.briefId}` : "";
+      return;
+    }
+    if (state.stage === "failed") {
+      fail(state.error || "The brief could not be written.");
+      return;
+    }
+
     if (state.note) setText(noteEl, state.note);
     drawSteps(state.steps ?? []);
 
@@ -302,26 +318,27 @@ function openPress() {
     document.removeEventListener("visibilitychange", woke);
   }
 
-  return {
-    // The last of the plate only comes off once the brief is really written.
-    async finish() {
-      hush();
-      reveal(1);
-      plateEl.classList.add("press__plate--whole");
-      $("pressCaption").classList.add("is-visible");
-      await new Promise((done) => setTimeout(done, 1100));
-    },
-    fail(message) {
-      hush();
-      cancelAnimationFrame(tweening);
-      $("press").hidden = true;
-      showBlank(message);
-      const blankStatus = $("blankStatus");
-      blankStatus.classList.add("is-error");
-      setText(blankStatus, message);
-      $("blankGenerate").textContent = "Try again";
-    },
-  };
+  // The last of the plate only comes off once the brief is really written.
+  async function finish() {
+    hush();
+    reveal(1);
+    plateEl.classList.add("press__plate--whole");
+    $("pressCaption").classList.add("is-visible");
+    await new Promise((done) => setTimeout(done, 1100));
+  }
+
+  function fail(message) {
+    hush();
+    cancelAnimationFrame(tweening);
+    $("press").hidden = true;
+    showBlank(message);
+    const blankStatus = $("blankStatus");
+    blankStatus.classList.add("is-error");
+    setText(blankStatus, message);
+    $("blankGenerate").textContent = "Try again";
+  }
+
+  return { finish, fail };
 }
 
 function elapsed(seconds) {

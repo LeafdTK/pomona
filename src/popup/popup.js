@@ -75,8 +75,8 @@ async function write() {
   setText($("line"), "Reading your sources…");
   $("line").classList.remove("is-error");
   try {
-    const brief = await api.generate();
-    await chrome.tabs.create({ url: chrome.runtime.getURL(`src/brief/brief.html?id=${brief.id}`) });
+    await api.generate(); // the brief page shows it being written
+    await chrome.tabs.create({ url: chrome.runtime.getURL("src/brief/brief.html") });
     window.close();
   } catch (error) {
     setText($("line"), error.message);

@@ -163,6 +163,12 @@ func backoff(fails int) time.Duration {
 // to exist.
 const readyLead = 20 * time.Minute
 
+// catchUp is how long after the ready-by time a missed morning is still
+// worth writing. A laptop that wakes at ten gets its brief; an account made
+// at ten in the evening does not get "today's" written on the spot, it gets
+// tomorrow's at seven.
+const catchUp = 10 * time.Hour
+
 // dueNow decides, from the reader's own clock, whether their brief should be
 // written on this tick. Pure, so the timezone rule can be tested without a
 // scheduler or a store.
@@ -185,7 +191,7 @@ func dueNow(cfg *Config, now time.Time, lastRun string) (bool, string) {
 		// which would be yesterday's brief: hold it to midnight instead.
 		at = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	}
-	return !now.Before(at), today
+	return !now.Before(at) && now.Before(at.Add(readyLead+catchUp)), today
 }
 
 func schedule(ctx context.Context, store *Store, vault *Vault, writer *Writer) {
@@ -223,7 +229,7 @@ func schedule(ctx context.Context, store *Store, vault *Vault, writer *Writer) {
 				continue
 			}
 
-			log.Printf("writing today's brief for %s", user.Email)
+			log.Printf("writing today's brief for %s", userLabel(user))
 			if _, err := writer.Generate(ctx, mine, "scheduled"); err != nil {
 				try := tries[user.ID]
 				if try == nil {
@@ -233,11 +239,23 @@ func schedule(ctx context.Context, store *Store, vault *Vault, writer *Writer) {
 				try.fails++
 				try.next = now.Add(backoff(try.fails))
 				log.Printf("the brief failed for %s (attempt %d, next in %s): %v",
-					user.Email, try.fails, backoff(try.fails).Round(time.Minute), err)
+					userLabel(user), try.fails, backoff(try.fails).Round(time.Minute), err)
 				continue
 			}
 			lastRun[user.ID] = today
 			delete(tries, user.ID)
 		}
 	}
+}
+
+// userLabel names an account in a log line without leaking more than it
+// must: an email if there is one, else the name, else the id.
+func userLabel(u User) string {
+	switch {
+	case u.Email != "":
+		return u.Email
+	case u.Name != "":
+		return u.Name
+	}
+	return u.ID
 }

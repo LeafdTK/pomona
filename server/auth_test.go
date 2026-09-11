@@ -130,6 +130,9 @@ func TestDueNowFiresBeforeReadyBy(t *testing.T) {
 	if fire, _ := dueNow(cfg, at(9, 15), ""); !fire {
 		t.Error("a late morning should still catch up")
 	}
+	if fire, _ := dueNow(cfg, at(22, 20), ""); fire {
+		t.Error("an account made at ten in the evening had today's brief written on the spot")
+	}
 	cfg.Schedule.Time = "00:10"
 	// Yesterday's is written; tonight must not start tomorrow's early.
 	if fire, _ := dueNow(cfg, time.Date(2026, 9, 9, 23, 55, 0, 0, loc), "2026-09-09"); fire {
