@@ -76,6 +76,12 @@ async function boot() {
 
 /** Turn the server's state into the one sentence that tells you what to do. */
 function explain(state) {
+  // Served by a hosted server to a browser that has not signed in: the
+  // setup page is the front door, not a dead end that names the settings.
+  if (!chrome.runtime?.id && state.reachable && !state.paired && !state.local) {
+    location.replace("/welcome");
+    return "";
+  }
   if (!state.reachable) return `${state.error} Start it with: pomona`;
   if (state.needsSetup) return "Your server needs a passphrase. Open Sources and settings to choose one.";
   if (state.locked) return "Your server is locked. Open Sources and settings to unlock it.";

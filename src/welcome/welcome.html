@@ -52,6 +52,23 @@
     </div>
   </template>
 
+  <!-- A hosted server's front door: what this is, before anything is asked. -->
+  <template id="step-welcome">
+    <div class="step">
+      <p class="step__kicker">One page, every morning</p>
+      <h1 class="step__title">Good morning.<br>Let's make you a brief.</h1>
+      <p class="step__body">
+        Pomona reads what you already have open, Slack, GitHub, your calendar, and writes one
+        page about your day, ready before you sit down: what is yours, what is being asked of
+        you, what quietly lapsed. Claude writes it; you pay for your own Claude.
+      </p>
+      <p class="step__body" id="welcomeWhere"></p>
+      <div class="step__actions">
+        <button type="button" class="btn btn--primary" data-next>Start</button>
+      </div>
+    </div>
+  </template>
+
   <template id="step-read">
     <div class="step">
       <p class="step__kicker">What it may read</p>

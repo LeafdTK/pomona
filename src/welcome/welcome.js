@@ -97,9 +97,9 @@ function plan() {
   const paired = Boolean(state?.paired && config);
   const slackOn = config?.sources?.slack?.enabled === "true" && Boolean(config?.sources?.slack?.token);
   if (!paired) {
-    // Served, off this machine: sign in here. In the extension the sign-in
-    // happens inside the popup, so nothing to add.
-    if (mode === "served" && !state?.local) out.push("read", "signin");
+    // Served, off this machine: say what this is, then sign in here. In the
+    // extension the sign-in happens inside the popup, so nothing to add.
+    if (mode === "served" && !state?.local) out.push("welcome", "read", "signin");
   } else if (!slackOn) {
     out.push("read", "sources");
   }
@@ -189,6 +189,11 @@ async function wire(name, step) {
   if (back && at > 0) back.hidden = false;
 
   if (name === "where") wireWhere(step);
+  if (name === "welcome") {
+    setText($("welcomeWhere"), `Everything it reads and writes for you is kept on ${location.host}, ` +
+      "encrypted under a key that never touches the disk, and deleted on your say-so. " +
+      "The link at the top says exactly what it keeps.");
+  }
   if (name === "read") wireRead(step);
   if (name === "signin") wireSignIn(step);
   if (name === "sources") await renderPicks();
