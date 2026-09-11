@@ -217,7 +217,7 @@ try {
   const home = await fetch(`http://127.0.0.1:${PORT}/`);
   const homeHtml = await home.text();
   check("serves the brief page", home.status === 200 && homeHtml.includes("Tuesday Brief") === false && homeHtml.includes("brief.css"));
-  check("rewrites asset paths", homeHtml.includes('href="/src/brief/brief.css"'));
+  check("rewrites asset paths, versioned", /href="\/src\/brief\/brief\.css\?v=\d+\.\d+\.\d+"/.test(homeHtml));
   check("injects the chrome shim", homeHtml.includes("window.chrome"));
   check("serves its own css", (await fetch(`http://127.0.0.1:${PORT}/src/tokens.css`)).status === 200);
   check("settings page served", (await fetch(`http://127.0.0.1:${PORT}/settings`)).status === 200);

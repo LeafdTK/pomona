@@ -144,7 +144,9 @@ func (s *Server) page(w http.ResponseWriter, path, base string) {
 	// Any link the page makes to a file beside it. Naming the files instead,
 	// which is what this used to do, means every new page silently serves
 	// itself without styles until somebody remembers to extend the list.
-	html := relativeAsset.ReplaceAllString(string(raw), `$1="/`+base+`$2"`)
+	// The version rides on every asset link, so a deploy is a new URL and no
+	// cache between here and the browser can keep serving last week's page.
+	html := relativeAsset.ReplaceAllString(string(raw), `$1="/`+base+`$2?v=`+version+`"`)
 	// Served pages are a web app in their own right: installable, with a
 	// dock icon, no extension needed. The extension's copy of the same page
 	// does not carry this, so it is added here rather than in the file.

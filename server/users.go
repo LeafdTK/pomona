@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -178,9 +179,13 @@ func (s *Store) addUser(user *User) (*User, error) {
 			return nil, errors.New("there's already an account for that identity")
 		}
 	}
-	s.users = append(s.users, *user)
+	// Saved before it exists: an account the disk refused must not live on
+	// in memory, working until the next restart and then gone.
+	before := s.users
+	s.users = append(append([]User{}, before...), *user)
 	if err := s.saveUsersLocked(); err != nil {
-		return nil, err
+		s.users = before
+		return nil, fmt.Errorf("couldn't write the account list: %w", err)
 	}
 	if err := os.MkdirAll(s.path("users", user.ID, "briefs"), 0o700); err != nil {
 		return nil, err

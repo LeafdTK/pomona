@@ -36,7 +36,14 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s -- stable \
  && claude --version
 
 COPY --from=build /pomona /usr/local/bin/pomona
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# Start as root only long enough to own the volume, then drop to pomona
+# (see docker-entrypoint.sh). A platform mounts the volume as root, and a
+# server that cannot write its data directory keeps every account in memory
+# and loses them all on the next restart.
+USER root
 VOLUME /data
 EXPOSE 7777
 ENV POMONA_ADDR=0.0.0.0:7777 POMONA_DATA=/data
-ENTRYPOINT ["pomona"]
+ENTRYPOINT ["docker-entrypoint.sh"]
