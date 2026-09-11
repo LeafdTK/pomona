@@ -231,7 +231,15 @@ func askViaCLI(ctx context.Context, ask Ask, model, oauthToken string) (answer, 
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return answer{}, fmt.Errorf("claude took longer than 5 minutes")
 		}
+		// The CLI puts the reason in its JSON on stdout and exits 1 with an
+		// empty stderr, so "exit status 1" on its own tells nobody anything.
 		detail := strings.TrimSpace(stderr.String())
+		var res cliResult
+		if json.Unmarshal(stdout.Bytes(), &res) == nil && strings.TrimSpace(res.Result) != "" {
+			detail = strings.TrimSpace(res.Result)
+		} else if detail == "" {
+			detail = strings.TrimSpace(stdout.String())
+		}
 		if detail == "" {
 			detail = err.Error()
 		}
