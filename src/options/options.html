@@ -67,7 +67,7 @@
 
       <div id="signinPane" hidden>
         <p class="card__note card__note--tight" id="signinNote"></p>
-        <div class="row">
+        <div class="row" id="passwordRow">
           <label class="field">
             <span class="field__label">Email</span>
             <input type="email" id="email" autocomplete="username">
@@ -81,12 +81,18 @@
             <button type="button" class="btn" id="createAccount">Create an account</button>
           </div>
         </div>
+        <div class="row" id="hostedRow" hidden>
+          <div class="field field--action">
+            <button type="button" class="btn btn--primary" id="linkBrowser">Sign in</button>
+            <span class="field__help">Opens the server's sign-in in a small window: Slack, or a code by email. Nothing to copy.</span>
+          </div>
+        </div>
       </div>
 
       <div id="pairPane" hidden>
         <p class="card__note card__note--tight">
-          Your server is showing a six digit code in its terminal, the way a television does.
-          Type it here once and this browser is paired for good.
+          Signed in on another browser? Its settings page can show a six digit code under
+          "Pair another browser". Type it here once and this browser is paired for good.
         </p>
         <div class="row">
           <label class="field field--narrow">
@@ -106,14 +112,19 @@
             <button type="button" class="btn" id="signout">Sign out</button>
             <button type="button" class="btn" id="signoutOthers">Sign out other browsers</button>
             <button type="button" class="btn" id="lockServer">Lock the server</button>
+            <button type="button" class="btn" id="pairAnother">Pair another browser</button>
             <button type="button" class="btn btn--quiet" id="forgetAll">Delete my briefs</button>
+            <button type="button" class="btn btn--quiet" id="deleteAccount">Delete my account</button>
           </div>
         </div>
+        <p class="card__note card__note--tight" id="pairAnotherNote" hidden></p>
         <p class="card__note card__note--tight card__note--aside">
           Every paired browser holds a key to this account. Signing the others out ends them all
-          and leaves this one working. Deleting your briefs removes every stored page and note for
-          this account. Pomona keeps only the last few days anyway, and never stores the raw
-          messages it read.
+          and leaves this one working. Deleting your briefs removes every stored page, note and
+          excerpt for this account and keeps your connections. Deleting the account removes
+          those too, and every browser's key, at once. Pomona keeps clipped excerpts of what it
+          read for three days and the pages it wrote for as long as you choose below;
+          <a href="../privacy/privacy.html" id="privacyLink" target="_blank" rel="noopener">here is the whole of it</a>.
         </p>
       </div>
     </section>
@@ -121,7 +132,7 @@
     <section class="card" id="memoryCard" data-needs-pairing hidden>
       <h2 class="card__title">What Pomona remembers</h2>
       <p class="card__note">
-        Notes it kept from past mornings, stored in this browser and nowhere else.
+        Notes it kept from past mornings, stored encrypted on your server and nowhere else.
         They go into each new brief so it can tell what you cleared from what you've
         been carrying all week. Delete anything you'd rather it forgot.
       </p>
@@ -190,7 +201,7 @@
 
     <section class="card" data-needs-pairing hidden>
       <h2 class="card__title">Sources</h2>
-      <p class="card__note">Everything is read-only, stored locally, and sent only to Claude when the brief is written.</p>
+      <p class="card__note">Everything is read-only, stored encrypted on your server, and sent only to Claude when the brief is written.</p>
       <div id="connectors"></div>
     </section>
 
@@ -262,7 +273,7 @@
           <span>Write it automatically</span>
         </label>
         <label class="field">
-          <span class="field__label">At</span>
+          <span class="field__label">Ready by</span>
           <input type="time" id="scheduleTime">
         </label>
         <label class="field field--inline">
@@ -271,13 +282,26 @@
         </label>
       </div>
       <div class="row">
-        <label class="field field--inline">
-          <input type="checkbox" id="openTab">
-          <span>Open it in a background tab</span>
+        <label class="field">
+          <span class="field__label">When it's ready, this browser</span>
+          <select id="openTab">
+            <option value="front">opens it in front</option>
+            <option value="background">opens it in a background tab</option>
+            <option value="never">leaves it to the popup</option>
+          </select>
         </label>
         <label class="field field--inline">
-          <input type="checkbox" id="notify">
+          <input type="checkbox" id="notify" checked>
           <span>Notify me when it's ready</span>
+        </label>
+        <label class="field">
+          <span class="field__label">Keep past briefs for</span>
+          <select id="keepDays">
+            <option value="3">3 days</option>
+            <option value="7">a week</option>
+            <option value="14">two weeks</option>
+            <option value="30">a month</option>
+          </select>
         </label>
         <label class="field">
           <span class="field__label">Look back over</span>
@@ -289,7 +313,7 @@
           </select>
         </label>
       </div>
-      <p class="card__note" id="nextRun"></p>
+      <p class="card__note" id="nextRun">It starts reading twenty minutes before the hour, so the page is finished when you open the browser.</p>
     </section>
 
     <footer class="foot">

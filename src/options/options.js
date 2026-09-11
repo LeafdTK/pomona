@@ -20,8 +20,46 @@ async function boot() {
   const { url } = await api.connection();
   $("serverUrl").value = url;
   $("serverUrl").addEventListener("change", async () => {
-    await api.setConnection({ url: $("serverUrl").value.trim() });
+    const next = $("serverUrl").value.trim().replace(/\/$/, "");
+    if (api.inExtension() && /^https?:\/\//.test(next)) await api.allowHost(next).catch(() => false);
+    await api.setConnection({ url: next, token: "" });
     refresh();
+  });
+  if (!api.inExtension()) {
+    // Served by the server itself: the address is this one, and not a setting.
+    $("serverUrl").disabled = true;
+    $("privacyLink").href = "/privacy";
+  }
+
+  $("linkBrowser").addEventListener("click", async () => {
+    try {
+      const user = await api.linkViaBrowser((await api.connection()).url);
+      setResult($("connectionResult"), `Signed in as ${user.name || user.email}`, "ok");
+      chrome.runtime.sendMessage?.({ type: "reschedule" })?.catch?.(() => {});
+      refresh();
+    } catch (error) {
+      setResult($("connectionResult"), error.message, "error");
+    }
+  });
+  $("pairAnother").addEventListener("click", async () => {
+    try {
+      const { code, expires } = await api.pairCode();
+      const until = new Date(expires).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      setText($("pairAnotherNote"), `Type ${code} into the other browser's settings page. It works until ${until}, once.`);
+      $("pairAnotherNote").hidden = false;
+    } catch (error) {
+      flash(error.message);
+    }
+  });
+  $("deleteAccount").addEventListener("click", async () => {
+    if (!window.confirm("Delete this account, everything it stored, and every browser's key to it?")) return;
+    try {
+      await api.deleteAccount();
+      flash("Deleted");
+      refresh();
+    } catch (error) {
+      flash(error.message);
+    }
   });
 
   $("recheck").addEventListener("click", refresh);
@@ -104,15 +142,22 @@ async function refresh() {
   }
   if (!state.paired) {
     const many = state.accounts > 1;
-    setText(note, many
-      ? "This server has more than one account, so it needs to know which is yours."
-      : state.local
-        ? "Found your server but couldn't connect to it. Try Check again."
-        : "Sign in, or use the pairing code from the server's terminal.");
-    setText($("signinNote"), state.accounts === 0
-      ? "No accounts yet. Pick an email and password and this one is yours."
-      : "Sign in with the email and password you chose.");
-    show(false, false, !state.local && !many, false, many || !state.local);
+    const hosted = !state.local;
+    setText(note, hosted
+      ? "Found your server. Sign in to it, or pair with a code from a browser that already is."
+      : many
+        ? "This server has more than one account, so it needs to know which is yours."
+        : "Found your server but couldn't connect to it. Try Check again.");
+    setText($("signinNote"), hosted
+      ? ""
+      : state.accounts === 0
+        ? "No accounts yet. Pick an email and password and this one is yours."
+        : "Sign in with the email and password you chose.");
+    // Off this machine there are no passwords; the server's own page signs
+    // you in and hands this browser a key.
+    $("passwordRow").hidden = hosted;
+    $("hostedRow").hidden = !hosted || !api.inExtension();
+    show(false, false, hosted, false, many || hosted);
 
     const offered = $("pairCode").value.trim();
     if (offered.length === 6) await pair(offered);
@@ -140,6 +185,8 @@ async function loadEverything() {
   bindCheck("scheduleEnabled", "schedule.enabled");
   bindCheck("weekdaysOnly", "schedule.weekdaysOnly");
   bindNumber("lookback", "lookbackHours");
+  bindNumber("keepDays", "keepDays");
+  await bindPrefs();
 
   // After the bindings exist, so the guess lands in bound fields and saves
   // through the same path as typing does.
@@ -355,6 +402,23 @@ function bindNumber(id, path) {
   };
 }
 
+/**
+ * The two things that are this browser's rather than the account's: whether
+ * the morning page opens itself, and whether it says so. They live in
+ * chrome.storage, read by the background worker.
+ */
+async function bindPrefs() {
+  const { prefs = {} } = await chrome.storage.local.get("prefs");
+  $("openTab").value = prefs.openTab ?? "front";
+  $("notify").checked = prefs.notify !== false;
+  const keep = async () => {
+    await chrome.storage.local.set({ prefs: { openTab: $("openTab").value, notify: $("notify").checked } });
+    flash("Saved");
+  };
+  $("openTab").onchange = keep;
+  $("notify").onchange = keep;
+}
+
 /** No save button on purpose: the page writes through as you type. */
 function save({ now = false } = {}) {
   clearTimeout(saveTimer);
@@ -362,6 +426,8 @@ function save({ now = false } = {}) {
     try {
       await api.putConfig(config);
       flash("Saved");
+      // The morning alarm follows the schedule.
+      if (api.inExtension()) chrome.runtime.sendMessage({ type: "reschedule" }).catch(() => {});
     } catch (error) {
       flash(error.message);
     }

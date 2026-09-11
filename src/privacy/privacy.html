@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomona: what it reads and keeps</title>
+  <link rel="stylesheet" href="privacy.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <main class="page">
+    <header class="brand">
+      <span class="brand__mark blossom" data-blossom aria-hidden="true"></span>
+      <span class="brand__name">Pomona</span>
+    </header>
+
+    <p class="kicker">Plainly</p>
+    <h1>What it reads, what it keeps, and where it goes.</h1>
+    <p class="lede">
+      Pomona writes one page a morning from your own Slack, GitHub, calendar and Linear. To do
+      that a server you choose holds tokens for them and sends some of what it reads to
+      Claude. This is exactly what it reads, keeps and sends.
+    </p>
+
+    <h2>What it reads</h2>
+    <dl class="facts">
+      <dt>Slack</dt>
+      <dd>
+        Only what the line you picked allows, and Slack enforces that: the token is issued with
+        the scopes for that line and nothing else. <em>Public channels only</em> reads public
+        channels you are in and your own name. Each wider line adds DMs, or private channels,
+        or both plus search. Channels you tick as off limits are never fetched at all. Direct
+        messages are read only on a line that includes them.
+      </dd>
+      <dt>GitHub</dt>
+      <dd>
+        Pull requests waiting on your review, issues assigned to you, your open pull requests,
+        notifications you are part of, the repositories you can push to, and releases in ones
+        you own. Read-only, with a token you give it.
+      </dd>
+      <dt>Calendar</dt>
+      <dd>Today and tomorrow, from a private iCal link you paste. No Google account access.</dd>
+      <dt>Linear</dt>
+      <dd>Issues assigned to you and ones you follow that moved, with a personal API key.</dd>
+    </dl>
+
+    <h2>What it keeps</h2>
+    <dl class="facts">
+      <dt>Signals</dt>
+      <dd>
+        Clipped excerpts of what it read, at most five hundred characters for a message and
+        about two hundred per line of a conversation, so tomorrow can tell what is new from
+        what it already saw. Deleted three days after they were last seen. Slack user ids are
+        turned into names before storage; the member list is never stored.
+      </dd>
+      <dt>Briefs</dt>
+      <dd>The pages it wrote, for as many days as you choose in settings. Seven by default, thirty at most.</dd>
+      <dt>Notes</dt>
+      <dd>Up to two dozen short notes it learned across mornings, and what you told it to forget. All visible and deletable in settings.</dd>
+      <dt>Tokens</dt>
+      <dd>Your source tokens and your Anthropic key, in your account's own encrypted file.</dd>
+    </dl>
+    <p>
+      Every one of those files is encrypted at rest with AES-256-GCM under a key derived per
+      account from the server's master key. On a hosted server the master key lives in the
+      process environment, not on the disk beside the data.
+    </p>
+
+    <h2>What goes to Claude</h2>
+    <p>
+      Two or three calls a morning. A small model reads every new excerpt, three hundred
+      characters each, and sorts them; if any to-do from an earlier morning is undated, the
+      same model is asked once whether it still stands. Then the writing model sees at most
+      thirty excerpts, ranked, plus your calendar for today and tomorrow, your last three
+      briefs' to-dos, and the names of the places it worked out you own. When you connect a
+      source it also asks the small model to pick your name, role and timezone out of your
+      Slack and GitHub profiles. None of them ever sees a channel list, a member list, or
+      anything from a room you ticked off.
+    </p>
+    <p>
+      On your own machine with a Claude subscription, that goes through the local Claude Code
+      command line with session persistence off, so nothing is written to its logs. With an
+      API key it goes to api.anthropic.com over TLS. The only other outbound calls are to
+      the sources you connected, any custom URL you added yourself, and the Cleveland Museum
+      of Art's open-access API for the day's painting.
+    </p>
+
+    <h2>What it cannot promise</h2>
+    <p>
+      Whoever runs the server can read the key out of the process, because the process needs
+      it to read your Slack and call Claude at seven in the morning while you are asleep. A
+      hosted Pomona is a trust in whoever hosts it. If that is not a trust you want to make,
+      run it on your own machine: it is one binary, and the setup is the same.
+    </p>
+
+    <h2>Leaving</h2>
+    <p>
+      Settings has three buttons: sign out this browser, sign out every other browser, and
+      delete the account, which removes every file above and every device token, at once,
+      without asking anyone. Revoking the Slack token from Slack's side works too and needs
+      nobody's permission.
+    </p>
+
+    <footer class="foot">
+      <a id="back" href="/">Back to the brief</a>
+    </footer>
+  </main>
+  <script type="module" src="privacy.js"></script>
+</body>
+</html>

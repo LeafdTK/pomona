@@ -15,7 +15,7 @@ async function boot() {
   if (!state.reachable || state.needsSetup || state.locked || !state.paired) {
     setText($("line"), needs(state));
     $("primary").textContent = "Set it up";
-    $("primary").addEventListener("click", () => chrome.runtime.openOptionsPage());
+    $("primary").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("src/welcome/welcome.html") }));
     $("write").hidden = true;
     return;
   }
@@ -28,7 +28,7 @@ async function boot() {
   }
 
   if (!latest) {
-    setText($("line"), "Nothing written yet. The first brief takes about half a minute.");
+    setText($("line"), "Nothing written yet. The first brief takes a few minutes.");
     $("primary").textContent = "Write today's brief";
     $("primary").addEventListener("click", write);
     $("write").hidden = true;
@@ -63,7 +63,7 @@ async function boot() {
 }
 
 function needs(state) {
-  if (!state.reachable) return "Your Pomona server isn't running. Start it with: pomona";
+  if (!state.reachable) return "Can't reach your Pomona server. Set one up, or start yours with: pomona";
   if (state.needsSetup) return "Your server needs a passphrase before it can store anything.";
   if (state.locked) return "Your server is locked.";
   return "This browser isn't paired with your server yet.";

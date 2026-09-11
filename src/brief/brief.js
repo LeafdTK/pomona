@@ -92,7 +92,9 @@ function wireChrome() {
 
   $("regenerate").addEventListener("click", regenerate);
   $("blankGenerate").addEventListener("click", regenerate);
-  $("blankSetup").addEventListener("click", () => { location.href = "/welcome"; });
+  $("blankSetup").addEventListener("click", () => {
+    location.href = chrome.runtime?.id ? chrome.runtime.getURL("src/welcome/welcome.html") : "/welcome";
+  });
   for (const id of ["openOptions", "blankOptions"]) {
     $(id).addEventListener("click", () => chrome.runtime.openOptionsPage());
   }

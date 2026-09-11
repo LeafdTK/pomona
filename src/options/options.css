@@ -144,7 +144,8 @@ input:focus, select:focus, textarea:focus {
 
 .field--inline { display: flex; align-items: center; gap: 9px; font-size: 14px; }
 .field--inline input { width: auto; }
-.field--action { display: flex; align-items: center; gap: 12px; flex: 0 1 auto; margin-bottom: 16px; }
+.field--action { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: 0 1 auto; margin-bottom: 16px; }
+.card__note a { color: var(--crimson); text-decoration: none; border-bottom: 1px solid currentColor; }
 
 input[type="checkbox"] { accent-color: var(--crimson); width: 16px; height: 16px; }
 

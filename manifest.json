@@ -1,16 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Pomona",
-  "version": "0.1.0",
-  "description": "A morning brief, written from your own sources by your own Claude. Pairs with a local Pomona server.",
+  "version": "0.2.0",
+  "description": "A morning brief, written from your own Slack, GitHub and calendar by your own Claude. Ready before you open the browser.",
   "permissions": [
     "storage",
     "alarms",
-    "notifications"
+    "notifications",
+    "identity",
+    "tabs"
   ],
   "host_permissions": [
     "http://127.0.0.1:7777/*",
-    "http://localhost:7777/*"
+    "http://localhost:7777/*",
+    "https://pomona.leafd.dev/*"
   ],
   "optional_host_permissions": [
     "http://*/*",

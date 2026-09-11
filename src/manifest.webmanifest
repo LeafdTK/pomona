@@ -1,0 +1,14 @@
+{
+  "name": "Pomona",
+  "short_name": "Pomona",
+  "description": "One page every morning, written from what you're actually in the middle of.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f1e8",
+  "theme_color": "#b0394a",
+  "icons": [
+    { "src": "/icons/128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/icons/512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
