@@ -85,6 +85,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /api/pair/code", s.guard(s.pairCode))
 	mux.Handle("POST /api/link", s.guard(s.linkStart))
 	mux.Handle("GET /api/slack/channels", s.guard(s.slackChannels))
+	mux.Handle("POST /api/claude/test", s.guard(s.claudeTest))
 
 	// Slack's callback arrives from Slack, so it can't carry our own token.
 	mux.HandleFunc("GET /api/slack/callback", s.slackCallback)
@@ -1022,6 +1023,27 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request, _ *UserSt
 		return
 	}
 	ok(w, map[string]any{"deleted": true})
+}
+
+// claudeTest asks the account's Claude one tiny question, so a bad key or
+// token is found at setup rather than at twenty to seven tomorrow.
+func (s *Server) claudeTest(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
+	if !s.limits.Allow("claudetest:"+u.ID(), 20, time.Hour) {
+		fail(w, http.StatusTooManyRequests, errors.New("too many tests; wait a while"))
+		return
+	}
+	ctx, done := context.WithTimeout(r.Context(), 60*time.Second)
+	defer done()
+	cfg := u.Config()
+	written, err := AskClaude(ctx, cfg, Ask{
+		System: "Answer with the single word: ready", Prompt: "Are you there?",
+		Models: cfg.Small(), MaxTokens: 16, Purpose: "test",
+	})
+	if err != nil {
+		fail(w, http.StatusBadGateway, err)
+		return
+	}
+	ok(w, map[string]any{"ok": true, "model": written.Model})
 }
 
 // slackChannels lists the rooms the token can see, for choosing which ones

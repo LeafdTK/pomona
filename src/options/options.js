@@ -202,6 +202,16 @@ async function loadEverything(state) {
     $("oauthField").hidden = mode.value !== "subscription" || !hosted;
   };
   showKeys();
+  $("claudeTest").onclick = async () => {
+    setResult($("claudeResult"), "Checking…");
+    try {
+      await save({ now: true });
+      const { model } = await api.claudeTest();
+      setResult($("claudeResult"), `Anthropic answered on ${model}.`, "ok");
+    } catch (error) {
+      setResult($("claudeResult"), error.message, "error");
+    }
+  };
   mode.onchange = () => {
     config.claude.mode = mode.value;
     showKeys();

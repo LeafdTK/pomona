@@ -231,6 +231,8 @@ export const getServerSettings = () => request("/api/server");
 export const putServerSettings = (body) => request("/api/server", { method: "PUT", body });
 export const slackConnect = () => request("/api/slack/connect", { method: "POST" });
 export const slackDisconnect = () => request("/api/slack/disconnect", { method: "POST" });
+/** One tiny call to the account's Claude: is the key or token accepted? */
+export const claudeTest = () => request("/api/claude/test", { method: "POST" });
 /** The rooms the Slack token can see, for choosing which never to read. */
 export const slackChannels = () => request("/api/slack/channels");
 /** GitHub in one click, by reusing the gh CLI's token on this machine. */

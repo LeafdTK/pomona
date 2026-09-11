@@ -555,7 +555,17 @@ async function saveClaude() {
   }
   config.claude = { ...config.claude, mode, apiKey: key, oauthToken: token };
   await putConfig(config).catch((error) => note("claudeStatus", error.message, true));
-  return true;
+  // Ask Claude one question now. A credential that fails here would
+  // otherwise fail at twenty to seven, silently, every morning.
+  note("claudeStatus", "Checking with Anthropic…");
+  try {
+    await claudeTest();
+    note("claudeStatus", "");
+    return true;
+  } catch (error) {
+    note("claudeStatus", `Anthropic refused that: ${error.message}`, true);
+    return false;
+  }
 }
 
 // ── The last step ───────────────────────────────────────
