@@ -25,8 +25,8 @@ import (
 
 func main() {
 	var (
-		addr       = flag.String("addr", "127.0.0.1:7777", "address to listen on")
-		dataDir    = flag.String("data", defaultDataDir(), "where to keep the encrypted data")
+		addr       = flag.String("addr", envOr("POMONA_ADDR", "127.0.0.1:7777"), "address to listen on")
+		dataDir    = flag.String("data", envOr("POMONA_DATA", defaultDataDir()), "where to keep the encrypted data")
 		passphrase = flag.Bool("passphrase", false, "require a passphrase to unlock, instead of keeping the key on disk")
 	)
 	flag.Parse()
@@ -81,8 +81,13 @@ func run(addr, dataDir string, wantPassphrase bool) error {
 	devices, _ := store.Devices()
 	pairing := NewPairing(devices, store.SaveDevices)
 
+	hostedMode = !isLocalAddr(addr)
 	writer := newWriter()
-	server := &Server{store: store, vault: vault, pairing: pairing, brief: writer, oauth: NewOAuthStates(), passphraseMode: wantPassphrase}
+	server := &Server{
+		store: store, vault: vault, pairing: pairing, brief: writer,
+		oauth: NewOAuthStates(), otps: NewOTPs(), links: NewLinks(), limits: NewLimiter(),
+		passphraseMode: wantPassphrase, hosted: hostedMode,
+	}
 
 	banner(vault, addr, dataDir, loadedEnv)
 
@@ -90,11 +95,6 @@ func run(addr, dataDir string, wantPassphrase bool) error {
 	defer stop()
 
 	go schedule(ctx, store, vault, writer)
-	// A code is only worth showing when something off-machine has to pair.
-	// Browsers on this machine adopt themselves.
-	if !isLocalAddr(addr) {
-		go showPairingCode(ctx, vault, pairing, addr)
-	}
 
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -133,36 +133,8 @@ func banner(vault *Vault, addr, dataDir string, loadedEnv []string) {
 	fmt.Println()
 }
 
-// A code to type into the extension, refreshed while nothing is paired. This
-// is the television-pairing bit: the server shows it, you type it once.
-func showPairingCode(ctx context.Context, vault *Vault, pairing *Pairing, addr string) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	var expires time.Time
-	for {
-		// Poll often, mint rarely: the vault may be created or unlocked at any
-		// moment, and a code should appear promptly when it is.
-		// Only needed when something off-machine has to pair; local browsers
-		// adopt themselves.
-		if !vault.Locked() && pairing.Count() == 0 && time.Now().After(expires) {
-			code, until, err := pairing.Begin()
-			if err == nil {
-				expires = until
-				fmt.Printf("\n  Pairing code: %s   (good until %s)\n", code, until.Format("15:04:05"))
-				fmt.Printf("  or just open: http://%s/settings?code=%s\n\n", addr, code)
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
-// schedule writes the brief at the configured hour, and catches up if the
-// machine was asleep when it should have run.
+// schedule writes the brief so it is ready by the configured hour, and
+// catches up if the machine was asleep when it should have run.
 // attempt is one account's retry state. A failed morning used to retry every
 // single minute for the rest of the day, which is a fine way to turn one
 // outage into fourteen hundred.
@@ -185,6 +157,12 @@ func backoff(fails int) time.Duration {
 	return 5 * time.Minute << uint(fails-1)
 }
 
+// readyLead is how long before the "ready by" time the writing starts: a
+// Slack sweep is bounded at eight minutes, the threads and the write take a
+// few more, so the page exists when the hour arrives rather than starting
+// to exist.
+const readyLead = 20 * time.Minute
+
 // dueNow decides, from the reader's own clock, whether their brief should be
 // written on this tick. Pure, so the timezone rule can be tested without a
 // scheduler or a store.
@@ -201,7 +179,12 @@ func dueNow(cfg *Config, now time.Time, lastRun string) (bool, string) {
 	if _, err := fmt.Sscanf(cfg.Schedule.Time, "%d:%d", &hour, &minute); err != nil {
 		return false, today
 	}
-	at := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
+	at := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location()).Add(-readyLead)
+	if at.Day() != now.Day() {
+		// A ready-by time just after midnight starts the evening before,
+		// which would be yesterday's brief: hold it to midnight instead.
+		at = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	}
 	return !now.Before(at), today
 }
 

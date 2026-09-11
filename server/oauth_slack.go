@@ -29,8 +29,9 @@ const slackAccess = "https://slack.com/api/oauth.v2.access"
 // Slack without our own credentials, so the state parameter is the only thing
 // tying it back to an account.
 type pending struct {
-	userID  string
+	userID  string // empty for a sign-in: the account is made when Slack answers
 	access  string
+	next    string // where to send the browser afterwards
 	expires time.Time
 }
 
@@ -44,6 +45,15 @@ func NewOAuthStates() *OAuthStates {
 }
 
 func (o *OAuthStates) Begin(userID, access string) (string, error) {
+	return o.begin(pending{userID: userID, access: access})
+}
+
+// BeginSignIn is a run with no account behind it yet.
+func (o *OAuthStates) BeginSignIn(access, next string) (string, error) {
+	return o.begin(pending{access: access, next: next})
+}
+
+func (o *OAuthStates) begin(p pending) (string, error) {
 	raw := make([]byte, 24)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
@@ -58,7 +68,8 @@ func (o *OAuthStates) Begin(userID, access string) (string, error) {
 			delete(o.states, key)
 		}
 	}
-	o.states[state] = pending{userID: userID, access: access, expires: time.Now().Add(10 * time.Minute)}
+	p.expires = time.Now().Add(10 * time.Minute)
+	o.states[state] = p
 	return state, nil
 }
 
@@ -113,18 +124,28 @@ func (s *Server) slackConnect(w http.ResponseWriter, r *http.Request, u *UserSto
 // slackCallback is where Slack sends the browser back. It has no bearer token
 // on it, so everything hangs off the state parameter.
 func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
-	finish := func(note string) {
-		http.Redirect(w, r, "/settings?connected="+url.QueryEscape(note), http.StatusFound)
+	p, valid := s.oauth.Claim(r.URL.Query().Get("state"))
+
+	// A connect lands back on settings; a sign-in lands wherever it began,
+	// which is the setup page or the extension's link page.
+	back := "/settings"
+	if valid && p.userID == "" {
+		back = p.next
+	}
+	finish := func(note string, fragment string) {
+		target := back + "?connected=" + url.QueryEscape(note)
+		if fragment != "" {
+			target += "#" + fragment
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 	}
 
 	if slackErr := r.URL.Query().Get("error"); slackErr != "" {
-		finish("Slack said: " + slackErr)
+		finish("Slack said: "+slackErr, "")
 		return
 	}
-
-	p, valid := s.oauth.Claim(r.URL.Query().Get("state"))
 	if !valid {
-		finish("That Slack link expired. Try Connect again.")
+		finish("That Slack link expired. Try again.", "")
 		return
 	}
 
@@ -138,7 +159,7 @@ func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
 
 	res, err := httpClient.PostForm(slackAccess, form)
 	if err != nil {
-		finish("Couldn't reach Slack: " + err.Error())
+		finish("Couldn't reach Slack: "+err.Error(), "")
 		return
 	}
 	defer res.Body.Close()
@@ -153,17 +174,42 @@ func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
 			Scope       string `json:"scope"`
 		} `json:"authed_user"`
 		Team struct {
+			ID     string `json:"id"`
 			Name   string `json:"name"`
 			Domain string `json:"domain"`
 		} `json:"team"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil || !payload.OK {
-		finish(explainSlackError(payload.Error, string(body)))
+		finish(explainSlackError(payload.Error, string(body)), "")
 		return
 	}
 	if payload.AuthedUser.AccessToken == "" {
-		finish("Slack returned no user token. The app needs user scopes, not bot scopes.")
+		finish("Slack returned no user token. The app needs user scopes, not bot scopes.", "")
 		return
+	}
+
+	// A sign-in: the Slack identity names the account, made now if it is
+	// new, and this browser is signed into it. The token goes back to the
+	// page in the fragment, which never reaches a server log.
+	fragment := ""
+	if p.userID == "" {
+		identity := "slack:" + payload.Team.ID + ":" + payload.AuthedUser.ID
+		user := s.store.UserByIdentity(identity)
+		if user == nil {
+			created, err := s.store.CreateIdentityUser(identity, slackHandle(r, payload.AuthedUser.AccessToken))
+			if err != nil {
+				finish("Couldn't make your account: "+err.Error(), "")
+				return
+			}
+			user = created
+		}
+		token, err := s.pairing.Adopt(user.ID, deviceName(r))
+		if err != nil {
+			finish("Couldn't sign this browser in: "+err.Error(), "")
+			return
+		}
+		p.userID = user.ID
+		fragment = "token=" + token
 	}
 
 	// Straight into that account's own config, encrypted with their own key.
@@ -184,11 +230,25 @@ func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
 	cfg.Sources["slack"]["workspaceName"] = payload.Team.Name
 	cfg.Sources["slack"]["enabled"] = "true"
 	if err := store.SetConfig(cfg); err != nil {
-		finish("Couldn't save that: " + err.Error())
+		finish("Couldn't save that: "+err.Error(), fragment)
 		return
 	}
 
-	finish(fmt.Sprintf("Connected to %s", payload.Team.Name))
+	finish(fmt.Sprintf("Connected to %s", payload.Team.Name), fragment)
+}
+
+// slackHandle asks Slack who a fresh token belongs to, for the account's
+// display name. One call; a failure just means a blank name until the
+// profile inference fills it.
+func slackHandle(r *http.Request, token string) string {
+	client := &slackClient{ctx: r.Context(), token: token, granted: map[string]bool{}, nextAt: map[string]time.Time{}}
+	var me struct {
+		User string `json:"user"`
+	}
+	if err := client.call("auth.test", nil, &me); err != nil {
+		return ""
+	}
+	return me.User
 }
 
 // slackDomain accepts "hackclub", "hackclub.slack.com" or the full URL, and

@@ -63,11 +63,11 @@ func TestVaultRoundTrip(t *testing.T) {
 func TestPairing(t *testing.T) {
 	p := NewPairing(nil, func([]Device) error { return nil })
 
-	if _, err := p.Claim("123456", "user1", "x"); err == nil {
+	if _, err := p.Claim("123456", "x"); err == nil {
 		t.Fatal("claiming with no code outstanding should fail")
 	}
 
-	code, expires, err := p.Begin()
+	code, expires, err := p.Begin("user1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,16 +80,16 @@ func TestPairing(t *testing.T) {
 		wrong = "111111"
 	}
 	for i := 0; i < maxAttempts; i++ {
-		if _, err := p.Claim(wrong, "user1", "x"); err == nil {
+		if _, err := p.Claim(wrong, "x"); err == nil {
 			t.Fatal("wrong code accepted")
 		}
 	}
-	if _, err := p.Claim(code, "user1", "x"); err == nil {
+	if _, err := p.Claim(code, "x"); err == nil {
 		t.Fatal("the code should be dead after too many attempts")
 	}
 
-	code, _, _ = p.Begin()
-	token, err := p.Claim(code, "user1", "Chrome")
+	code, _, _ = p.Begin("user1")
+	token, err := p.Claim(code, "Chrome")
 	if err != nil || len(token) != tokenBytes*2 {
 		t.Fatalf("claim failed: %v %q", err, token)
 	}
@@ -99,7 +99,7 @@ func TestPairing(t *testing.T) {
 	if p.Whose("not-a-token") != "" || p.Whose("") != "" {
 		t.Fatal("recognised a token it never issued")
 	}
-	if _, err := p.Claim(code, "user1", "again"); err == nil {
+	if _, err := p.Claim(code, "again"); err == nil {
 		t.Fatal("a code was reusable")
 	}
 	for _, d := range p.DevicesFor("user1") {

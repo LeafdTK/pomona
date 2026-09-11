@@ -1185,6 +1185,42 @@ func slackSearchRaw(client *slackClient, query string, w Window) []slackMatch {
 	return matches
 }
 
+// Room is a channel as the settings page names it: for choosing what Pomona
+// must never read.
+type Room struct {
+	Name    string `json:"name"`
+	Private bool   `json:"private"`
+}
+
+// slackRooms lists the channels a token can see, public and (if the tier
+// allows) private. Direct messages are not rooms and are not listed: they
+// are switched off as a whole or not at all.
+func slackRooms(ctx context.Context, settings map[string]string) ([]Room, error) {
+	client := &slackClient{ctx: ctx, token: settings["token"], granted: map[string]bool{}, nextAt: map[string]time.Time{}}
+	// One call first, so the scopes are known and the listing asks only for
+	// types the token can read.
+	var me struct {
+		OK bool `json:"ok"`
+	}
+	if err := client.call("auth.test", nil, &me); err != nil {
+		return nil, err
+	}
+	types := []string{"public_channel"}
+	access := settings["access"]
+	if (access == AccessPrivate || access == AccessAll) && client.has("groups:read") {
+		types = append(types, "private_channel")
+	}
+	rooms := []Room{}
+	for _, c := range listConversations(client, strings.Join(types, ","), 1000) {
+		if c.Name == "" || c.Archived || c.IsIM || c.IsMPIM {
+			continue
+		}
+		rooms = append(rooms, Room{Name: c.Name, Private: c.IsPvt})
+	}
+	sort.Slice(rooms, func(i, j int) bool { return rooms[i].Name < rooms[j].Name })
+	return rooms, nil
+}
+
 // listConversations walks every page. Slack answers 200 at a time and hands
 // back a cursor; stopping at the first page silently loses the tail, which is
 // where the channel you needed turns out to be.

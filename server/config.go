@@ -30,7 +30,7 @@ type Config struct {
 
 	Schedule struct {
 		Enabled      bool   `json:"enabled"`
-		Time         string `json:"time"` // "07:30", in the reader's timezone
+		Time         string `json:"time"` // "07:00": when it should be ready by, in the reader's timezone
 		WeekdaysOnly bool   `json:"weekdaysOnly"`
 		Set          bool   `json:"set"` // the reader chose the time themselves
 	} `json:"schedule"`
@@ -111,6 +111,6 @@ func defaultConfig() *Config {
 	c.Claude.Effort = "high"
 	c.Claude.TriageModel = "claude-haiku-4-5"
 	c.Schedule.Enabled = true
-	c.Schedule.Time = "07:30"
+	c.Schedule.Time = "07:00" // ready by, in the reader's timezone
 	return c
 }

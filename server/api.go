@@ -18,13 +18,17 @@ type Server struct {
 	pairing *Pairing
 	brief   *Writer
 	oauth   *OAuthStates
+	otps    *OTPs
+	links   *Links
+	limits  *Limiter
 
 	// Started with --passphrase, so the browser has to set one before anything
 	// works. Without it the server keeps its own key and is ready immediately.
 	passphraseMode bool
 
-	// Whether accounts can be made from off this machine.
-	openSignup bool
+	// Listening off loopback: strangers can reach this, so accounts come from
+	// Slack or an emailed code, never from a password form.
+	hosted bool
 }
 
 func (s *Server) Routes() http.Handler {
@@ -36,8 +40,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/unlock", s.unlock)
 	mux.HandleFunc("POST /api/pair", s.pair)
 	mux.HandleFunc("POST /api/pair/auto", s.pairAuto)
+	mux.HandleFunc("POST /api/pair/exchange", s.pairExchange)
 	mux.HandleFunc("POST /api/signup", s.signup)
 	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/auth/email", s.emailStart)
+	mux.HandleFunc("POST /api/auth/email/verify", s.emailVerify)
+	mux.HandleFunc("GET /auth/slack", s.slackSignIn)
 
 	// Paired only.
 	mux.Handle("GET /api/config", s.guard(s.getConfig))
@@ -72,6 +80,10 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /api/account/forget", s.guard(s.forgetEverything))
 	mux.Handle("POST /api/logout", s.guard(s.logout))
 	mux.Handle("POST /api/account/devices/others", s.guard(s.signOutOthers))
+	mux.Handle("POST /api/account/delete", s.guard(s.deleteAccount))
+	mux.Handle("POST /api/pair/code", s.guard(s.pairCode))
+	mux.Handle("POST /api/link", s.guard(s.linkStart))
+	mux.Handle("GET /api/slack/channels", s.guard(s.slackChannels))
 
 	// Slack's callback arrives from Slack, so it can't carry our own token.
 	mux.HandleFunc("GET /api/slack/callback", s.slackCallback)
@@ -83,7 +95,25 @@ func (s *Server) Routes() http.Handler {
 	// The pages themselves, so the server is usable without the extension.
 	s.webRoutes(mux)
 
-	return cors(mux)
+	return secure(cors(mux), s.hosted)
+}
+
+// secure sets the headers a page on the open internet should carry. The
+// pages are served from this origin and talk only to it; the one outside
+// image is the day's painting.
+func secure(next http.Handler, hosted bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "+
+			"img-src 'self' data: https://*.clevelandart.org; connect-src 'self'; frame-ancestors 'none'")
+		if hosted && (r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https") {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // The extension is a browser page, so it needs permission to talk to us at
@@ -92,7 +122,7 @@ func (s *Server) Routes() http.Handler {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if allowedOrigin(origin) {
+		if allowedOrigin(origin) || ownOrigin(origin, r) {
 			if origin == "" {
 				origin = "*"
 			}
@@ -120,6 +150,15 @@ func allowedOrigin(origin string) bool {
 	default:
 		return false
 	}
+}
+
+// ownOrigin is the server's own pages calling it over a real hostname: the
+// preflight carries that hostname as the origin, and it has to be let in.
+func ownOrigin(origin string, r *http.Request) bool {
+	if origin == "" || r.Host == "" {
+		return false
+	}
+	return origin == "https://"+r.Host || origin == "http://"+r.Host
 }
 
 // A request carries a device token; the token names an account; the handler
@@ -163,6 +202,12 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		// Whether locking means anything here. Without a passphrase it doesn't.
 		"passphrase": s.vault.Exists(),
 		"accounts":   len(s.store.Users()),
+		"hosted":     s.hosted,
+		// Which doors are open for someone who is not on this machine.
+		"auth": map[string]bool{
+			"slack": s.store.ServerSettings().Slack.Configured(),
+			"email": mailConfigured(),
+		},
 	})
 }
 
@@ -220,12 +265,15 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	users := s.store.Users()
-	if len(users) != 1 {
-		fail(w, http.StatusConflict, errors.New("sign in with your email and password instead"))
+	if s.vault.Locked() {
+		fail(w, http.StatusLocked, ErrLocked)
 		return
 	}
-	token, err := s.pairing.Claim(strings.TrimSpace(body.Code), users[0].ID, deviceName(r))
+	if !s.limits.Allow("pair:ip:"+clientIP(r), 10, time.Minute) {
+		fail(w, http.StatusTooManyRequests, errors.New("too many tries; wait a minute"))
+		return
+	}
+	token, err := s.pairing.Claim(strings.TrimSpace(body.Code), deviceName(r))
 	if err != nil {
 		fail(w, http.StatusUnauthorized, err)
 		return
@@ -260,9 +308,9 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusLocked, ErrLocked)
 		return
 	}
-	// A server on the open internet shouldn't let strangers make accounts.
-	if !isLoopback(r) && !s.openSignup {
-		fail(w, http.StatusForbidden, errors.New("this server isn't accepting new accounts"))
+	// Off this machine there are no passwords: sign in with Slack or a code.
+	if !isLoopback(r) {
+		fail(w, http.StatusForbidden, errors.New("this server makes accounts through Slack or an emailed code, not a password"))
 		return
 	}
 
@@ -290,6 +338,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.vault.Locked() {
 		fail(w, http.StatusLocked, ErrLocked)
+		return
+	}
+	if !s.limits.Allow("login:ip:"+clientIP(r), 10, time.Minute) {
+		fail(w, http.StatusTooManyRequests, errors.New("too many tries; wait a minute"))
 		return
 	}
 
@@ -350,8 +402,10 @@ func (s *Server) pairAuto(w http.ResponseWriter, r *http.Request) {
 	if len(users) == 1 {
 		user = &users[0]
 	} else {
-		// First run on your own machine: make the account silently.
-		created, err := s.store.CreateUser("you@localhost", "You", "pomona-local-account")
+		// First run on your own machine: make the account silently. The
+		// password is random and never shown: this account is entered by
+		// being on this machine, not by typing anything.
+		created, err := s.store.CreateUser("you@localhost", "You", randomSecret())
 		if err != nil {
 			fail(w, http.StatusInternalServerError, err)
 			return
@@ -910,6 +964,36 @@ func (s *Server) forgetEverything(w http.ResponseWriter, r *http.Request, u *Use
 		return
 	}
 	ok(w, map[string]any{"ok": true})
+}
+
+// deleteAccount is leaving: every file, every token, every browser. Nothing
+// is kept and nothing is asked.
+func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request, _ *UserStore, user *User) {
+	if err := s.pairing.RevokeUser(user.ID); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := s.store.DeleteUser(user.ID); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	ok(w, map[string]any{"deleted": true})
+}
+
+// slackChannels lists the rooms the token can see, for choosing which ones
+// Pomona must never read. Names only.
+func (s *Server) slackChannels(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
+	settings := u.Config().Sources["slack"]
+	if settings == nil || settings["token"] == "" {
+		fail(w, http.StatusPreconditionFailed, errors.New("connect Slack first"))
+		return
+	}
+	rooms, err := slackRooms(r.Context(), settings)
+	if err != nil {
+		fail(w, http.StatusBadGateway, err)
+		return
+	}
+	ok(w, rooms)
 }
 
 // signOutOthers ends every other browser signed into this account.

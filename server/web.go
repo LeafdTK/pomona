@@ -55,6 +55,11 @@ const chromeShim = `<script>
 })();
 </script>`
 
+const webAppHead = `<link rel="manifest" href="/src/manifest.webmanifest">
+<link rel="icon" href="/icons/128.png" type="image/png">
+<meta name="theme-color" content="#b0394a">
+`
+
 // The pages are compiled into the binary, so a built server needs no files
 // beside it. But if you're running from the source tree, the copy on disk wins:
 // otherwise every CSS tweak needs a rebuild, which is a slow way to find out
@@ -75,8 +80,10 @@ func (s *Server) webRoutes(mux *http.ServeMux) {
 			s.page(w, "src/brief/brief.html", "src/brief/")
 		case "/settings":
 			s.page(w, "src/options/options.html", "src/options/")
-		case "/welcome":
+		case "/welcome", "/link":
 			s.page(w, "src/welcome/welcome.html", "src/welcome/")
+		case "/privacy":
+			s.page(w, "src/privacy/privacy.html", "src/privacy/")
 
 		// Anything that links to the pages by filename, from an older tab or a
 		// bookmark, belongs on the route that actually carries the shim.
@@ -86,6 +93,8 @@ func (s *Server) webRoutes(mux *http.ServeMux) {
 			redirect(w, r, "/settings")
 		case "/src/welcome/welcome.html":
 			redirect(w, r, "/welcome")
+		case "/src/privacy/privacy.html":
+			redirect(w, r, "/privacy")
 
 		default:
 			files.ServeHTTP(w, r)
@@ -117,7 +126,10 @@ func (s *Server) page(w http.ResponseWriter, path, base string) {
 	// which is what this used to do, means every new page silently serves
 	// itself without styles until somebody remembers to extend the list.
 	html := relativeAsset.ReplaceAllString(string(raw), `$1="/`+base+`$2"`)
-	html = strings.Replace(html, "</head>", chromeShim+"\n</head>", 1)
+	// Served pages are a web app in their own right: installable, with a
+	// dock icon, no extension needed. The extension's copy of the same page
+	// does not carry this, so it is added here rather than in the file.
+	html = strings.Replace(html, "</head>", webAppHead+chromeShim+"\n</head>", 1)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(bytes.NewBufferString(html).Bytes())

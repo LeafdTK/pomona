@@ -37,6 +37,7 @@ type Device struct {
 type Pairing struct {
 	mu       sync.Mutex
 	code     string
+	codeFor  string // the account the code signs a browser into
 	expires  time.Time
 	attempts int
 
@@ -48,15 +49,16 @@ func NewPairing(devices []Device, save func([]Device) error) *Pairing {
 	return &Pairing{devices: devices, save: save}
 }
 
-// Begin mints a code to show the user. Any previous one stops working.
-func (p *Pairing) Begin() (string, time.Time, error) {
+// Begin mints a code for one account, to show the person who owns it. Any
+// previous code stops working.
+func (p *Pairing) Begin(userID string) (string, time.Time, error) {
 	code, err := sixDigits()
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.code, p.expires, p.attempts = code, time.Now().Add(codeTTL), 0
+	p.code, p.codeFor, p.expires, p.attempts = code, userID, time.Now().Add(codeTTL), 0
 	return code, p.expires, nil
 }
 
@@ -87,8 +89,9 @@ func (p *Pairing) Adopt(userID, name string) (string, error) {
 	return p.issueLocked(userID, name)
 }
 
-// Claim exchanges a correct code for a device token, once.
-func (p *Pairing) Claim(code, userID, name string) (string, error) {
+// Claim exchanges a correct code for a device token, once, on the account
+// the code was minted for.
+func (p *Pairing) Claim(code, name string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -108,7 +111,8 @@ func (p *Pairing) Claim(code, userID, name string) (string, error) {
 	}
 
 	// Correct: burn the code before doing anything else.
-	p.code = ""
+	userID := p.codeFor
+	p.code, p.codeFor = "", ""
 	return p.issueLocked(userID, name)
 }
 
@@ -149,6 +153,10 @@ func (p *Pairing) issueLocked(userID, name string) (string, error) {
 	return token, nil
 }
 
+// A browser that has not been seen for this long is signed out: a token
+// left in an old profile should not work forever.
+const deviceIdle = 90 * 24 * time.Hour
+
 // Whose returns the account a token belongs to, or "" if it belongs to nobody.
 func (p *Pairing) Whose(token string) string {
 	if token == "" {
@@ -158,6 +166,11 @@ func (p *Pairing) Whose(token string) string {
 	defer p.mu.Unlock()
 	for i := range p.devices {
 		if subtle.ConstantTimeCompare([]byte(token), []byte(p.devices[i].Token)) == 1 {
+			if !p.devices[i].LastSeen.IsZero() && time.Since(p.devices[i].LastSeen) > deviceIdle {
+				p.devices = append(p.devices[:i], p.devices[i+1:]...)
+				_ = p.save(p.devices)
+				return ""
+			}
 			// Written through now and then, not on every request: eviction has
 			// to survive a restart, but re-encrypting the device list for each
 			// poll of a progress endpoint would be absurd.
@@ -238,6 +251,20 @@ func (p *Pairing) RevokeOthers(userID, keep string) (int, error) {
 	}
 	p.devices = kept
 	return dropped, p.save(p.devices)
+}
+
+// RevokeUser forgets every device of an account that is being deleted.
+func (p *Pairing) RevokeUser(userID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	kept := []Device{}
+	for _, d := range p.devices {
+		if d.UserID != userID {
+			kept = append(kept, d)
+		}
+	}
+	p.devices = kept
+	return p.save(p.devices)
 }
 
 func sixDigits() (string, error) {

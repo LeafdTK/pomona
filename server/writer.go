@@ -13,7 +13,11 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
+
+// hostedMode is set when the server listens off loopback. A few things that
+// are fine on your own laptop are not fine on a shared machine.
+var hostedMode bool
 
 // Writer turns a morning into a brief: gather, refine, ask Claude, store.
 // It's shared by every account, and only writes one at a time so a server with
@@ -105,7 +109,7 @@ func (wr *Writer) Generate(ctx context.Context, store *UserStore, trigger string
 	painting, _ := PickPainting(ctx, DayKey(now))
 
 	prompt := BuildPrompt(cfg, now, results, store.Memory(), past3, painting, own)
-	if dir := os.Getenv("POMONA_DEBUG_PROMPT"); dir != "" {
+	if dir := os.Getenv("POMONA_DEBUG_PROMPT"); dir != "" && !hostedMode {
 		// Whether a thin brief means a thin morning or a broken collector is
 		// invisible from the outside, and guessing at it is expensive.
 		_ = os.WriteFile(filepath.Join(dir, "prompt-"+DayKey(now)+".txt"), []byte(prompt), 0o600)

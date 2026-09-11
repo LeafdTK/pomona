@@ -61,6 +61,19 @@ func OpenVault(path string) *Vault { return &Vault{path: path} }
 func (v *Vault) OpenAuto() error {
 	keyPath := v.path + ".key"
 
+	// A hosted server keeps the key in its environment and the data on a
+	// volume, so a copy of the volume alone is ciphertext.
+	if fromEnv := strings.TrimSpace(os.Getenv("POMONA_VAULT_KEY")); fromEnv != "" {
+		key, err := base64.StdEncoding.DecodeString(fromEnv)
+		if err != nil || len(key) != 32 {
+			return errors.New("POMONA_VAULT_KEY must be 32 bytes, base64 encoded: try `openssl rand -base64 32`")
+		}
+		v.mu.Lock()
+		v.master = key
+		v.mu.Unlock()
+		return nil
+	}
+
 	if raw, err := os.ReadFile(keyPath); err == nil {
 		key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
 		if err != nil || len(key) != 32 {

@@ -34,6 +34,9 @@ type User struct {
 	Salt      string    `json:"salt"`
 	Hash      string    `json:"hash"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Who signed in without an email: "slack:<team>:<user>". Such an account
+	// has no password and no email; the identity is the whole key.
+	Identity string `json:"identity,omitempty"`
 }
 
 func normaliseEmail(email string) string {
@@ -76,8 +79,24 @@ func newUser(email, name, password string) (*User, error) {
 	}, nil
 }
 
+// newIdentityUser is an account with no email and no password: whoever
+// proves the identity to Slack is its owner.
+func newIdentityUser(identity, name string) (*User, error) {
+	if identity == "" {
+		return nil, errors.New("no identity to make an account from")
+	}
+	id := make([]byte, 8)
+	if _, err := rand.Read(id); err != nil {
+		return nil, err
+	}
+	return &User{ID: hex.EncodeToString(id), Name: name, Identity: identity, CreatedAt: time.Now()}, nil
+}
+
 // Matches reports whether a password is this account's, in constant time.
 func (u *User) Matches(password string) bool {
+	if u.Hash == "" {
+		return false // no password path at all
+	}
 	salt, err := base64.StdEncoding.DecodeString(u.Salt)
 	if err != nil {
 		return false
@@ -137,12 +156,26 @@ func (s *Store) CreateUser(email, name, password string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.addUser(user)
+}
 
+func (s *Store) CreateIdentityUser(identity, name string) (*User, error) {
+	user, err := newIdentityUser(identity, name)
+	if err != nil {
+		return nil, err
+	}
+	return s.addUser(user)
+}
+
+func (s *Store) addUser(user *User) (*User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, existing := range s.users {
-		if existing.Email == user.Email {
+		if user.Email != "" && existing.Email == user.Email {
 			return nil, errors.New("there's already an account with that email")
+		}
+		if user.Identity != "" && existing.Identity == user.Identity {
+			return nil, errors.New("there's already an account for that identity")
 		}
 	}
 	s.users = append(s.users, *user)
@@ -157,6 +190,9 @@ func (s *Store) CreateUser(email, name, password string) (*User, error) {
 
 func (s *Store) UserByEmail(email string) *User {
 	email = normaliseEmail(email)
+	if email == "" {
+		return nil // identity accounts have no email, and must not match a blank
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for i := range s.users {
@@ -166,6 +202,39 @@ func (s *Store) UserByEmail(email string) *User {
 		}
 	}
 	return nil
+}
+
+func (s *Store) UserByIdentity(identity string) *User {
+	if identity == "" {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i := range s.users {
+		if s.users[i].Identity == identity {
+			clone := s.users[i]
+			return &clone
+		}
+	}
+	return nil
+}
+
+// DeleteUser removes an account and everything it stored. The device list
+// is the caller's to clean, since it lives in Pairing.
+func (s *Store) DeleteUser(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.users[:0]
+	for _, u := range s.users {
+		if u.ID != id {
+			kept = append(kept, u)
+		}
+	}
+	s.users = kept
+	if err := s.saveUsersLocked(); err != nil {
+		return err
+	}
+	return os.RemoveAll(s.path("users", id))
 }
 
 func (s *Store) UserByID(id string) *User {

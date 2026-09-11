@@ -243,6 +243,7 @@ func (u *UserStore) prune() error {
 }
 
 // Forget removes everything this account has stored, briefs and notes both.
+// The config, with its tokens, stays: this is "start over", not "leave".
 func (u *UserStore) ForgetEverything() error {
 	if err := os.RemoveAll(u.path("briefs")); err != nil {
 		return err
