@@ -508,20 +508,47 @@ function wireClaude() {
     return;
   }
   setText($("claudeBody"), hosted
-    ? "A hosted server can't use your Claude subscription: that only works where Claude Code is signed in, and this machine isn't yours. So it uses an API key of your own, and this is the one thing in setup you have to paste."
+    ? "This server isn't your machine, so it can't borrow your Claude login. Bring your own: either a Claude Code token, which keeps you on your subscription, or an API key. Either way it is yours alone, stored encrypted, and used only for your briefs."
     : "The claude CLI isn't on this server, so it needs an API key from console.anthropic.com.");
   $("claudeFields").hidden = false;
   $("apiKey").value = config?.claude?.apiKey ?? "";
+  $("oauthToken").value = config?.claude?.oauthToken ?? "";
+
+  const doors = $("claudeDoors");
+  if (!cli) {
+    // No CLI here: the only door is the key.
+    $("oauthField").hidden = true;
+    $("apiKeyField").hidden = false;
+    return;
+  }
+  doors.hidden = false;
+  const pick = (mode) => {
+    $("oauthField").hidden = mode !== "subscription";
+    $("apiKeyField").hidden = mode !== "apikey";
+  };
+  const current = config?.claude?.mode === "apikey" && config?.claude?.apiKey ? "apikey" : "subscription";
+  for (const radio of doors.querySelectorAll("input")) {
+    radio.checked = radio.value === current;
+    radio.addEventListener("change", () => pick(radio.value));
+  }
+  pick(current);
 }
 
 async function saveClaude() {
   if ($("claudeFields").hidden || !config) return true;
+  const cli = Boolean(state?.claudeCLI);
+  const mode = cli ? ($("claudeDoors").querySelector("input:checked")?.value ?? "subscription") : "apikey";
   const key = $("apiKey").value.trim();
-  if (!key) {
+  const token = $("oauthToken").value.trim();
+  if (mode === "apikey" && !key) {
     note("claudeStatus", "Without a key there is nothing to write the brief with.", true);
     return false;
   }
-  config.claude = { ...config.claude, mode: "apikey", apiKey: key };
+  if (mode === "subscription" && !token) {
+    note("claudeStatus", "Paste the token from `claude setup-token`, or pick the API key instead.", true);
+    return false;
+  }
+  config.claude = { ...config.claude, mode, apiKey: key, oauthToken: token };
   await putConfig(config).catch((error) => note("claudeStatus", error.message, true));
   return true;
 }

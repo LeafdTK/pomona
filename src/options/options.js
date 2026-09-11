@@ -170,17 +170,19 @@ async function refresh() {
   setText(note, `${who ? `Signed in as ${who.user.name}. ` : ""}${state.claudeCLI ? "Claude Code is installed, so your subscription can write the brief." : "The claude CLI isn't on the server's PATH, so use an API key."}`);
   show(false, false, false, true);
 
-  await loadEverything();
+  await loadEverything(state);
 }
 
-async function loadEverything() {
+async function loadEverything(state) {
   [config, sources, server] = await Promise.all([api.getConfig(), api.getSources(), api.getServerSettings()]);
+  server.hosted = Boolean(state?.hosted);
 
   bind("name", "profile.name");
   bind("role", "profile.role");
   bind("focus", "profile.focus");
   bind("model", "claude.model");
   bind("apiKey", "claude.apiKey");
+  bind("oauthToken", "claude.oauthToken");
   bind("scheduleTime", "schedule.time");
   bindCheck("scheduleEnabled", "schedule.enabled");
   bindCheck("weekdaysOnly", "schedule.weekdaysOnly");
@@ -194,10 +196,15 @@ async function loadEverything() {
 
   const mode = $("claudeMode");
   mode.value = config.claude.mode || "subscription";
-  $("apiKeyField").hidden = mode.value !== "apikey";
+  const hosted = Boolean(server.hosted);
+  const showKeys = () => {
+    $("apiKeyField").hidden = mode.value !== "apikey";
+    $("oauthField").hidden = mode.value !== "subscription" || !hosted;
+  };
+  showKeys();
   mode.onchange = () => {
     config.claude.mode = mode.value;
-    $("apiKeyField").hidden = mode.value !== "apikey";
+    showKeys();
     save({ now: true });
   };
 

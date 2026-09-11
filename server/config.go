@@ -21,8 +21,12 @@ type Config struct {
 		// plan. "apikey" calls the Messages API and bills per token.
 		Mode   string `json:"mode"`
 		APIKey string `json:"apiKey"`
-		Model  string `json:"model"`
-		Effort string `json:"effort"`
+		// A long-lived Claude Code credential from `claude setup-token`, for
+		// subscription mode on a server that is not the reader's own machine.
+		// Each account brings its own; the server never shares a login.
+		OAuthToken string `json:"oauthToken"`
+		Model      string `json:"model"`
+		Effort     string `json:"effort"`
 		// The small model for triage, profile guessing and anything else that
 		// is a few hundred tokens of judgement rather than a page of prose.
 		TriageModel string `json:"triageModel"`

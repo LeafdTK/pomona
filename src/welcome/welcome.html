@@ -158,11 +158,36 @@
       <p class="step__kicker">Who writes it</p>
       <h1 class="step__title">Your own Claude.</h1>
       <p class="step__body" id="claudeBody"></p>
+      <ul class="tiers" id="claudeDoors" hidden>
+        <li class="tier">
+          <label class="tier__label">
+            <input type="radio" name="claudeMode" class="tier__radio" value="subscription" checked>
+            <span class="tier__main">
+              <span class="tier__name">My Claude subscription</span>
+              <span class="tier__reads">Run <code>claude setup-token</code> on your own machine and paste what it prints. It is your own Claude Code login, used only for your briefs, stored encrypted.</span>
+            </span>
+          </label>
+        </li>
+        <li class="tier">
+          <label class="tier__label">
+            <input type="radio" name="claudeMode" class="tier__radio" value="apikey">
+            <span class="tier__main">
+              <span class="tier__name">An Anthropic API key</span>
+              <span class="tier__reads">From console.anthropic.com. Billed per token: roughly two dollars a morning on Opus, a fraction of that on Sonnet.</span>
+            </span>
+          </label>
+        </li>
+      </ul>
       <div class="fields" id="claudeFields" hidden>
-        <label class="field field--wide">
+        <label class="field field--wide" id="oauthField">
+          <span class="field__label">Claude Code token</span>
+          <input type="password" id="oauthToken" placeholder="sk-ant-oat01-…" spellcheck="false" autocomplete="off">
+          <span class="field__help">Sent only to Anthropic, by a Claude Code process that runs for you alone.</span>
+        </label>
+        <label class="field field--wide" id="apiKeyField" hidden>
           <span class="field__label">Anthropic API key</span>
           <input type="password" id="apiKey" placeholder="sk-ant-…" spellcheck="false" autocomplete="off">
-          <span class="field__help">Stored encrypted on the server and sent only to api.anthropic.com. Roughly two dollars a morning on Opus; a fraction of that on Sonnet.</span>
+          <span class="field__help">Stored encrypted on the server and sent only to api.anthropic.com.</span>
         </label>
       </div>
       <div class="step__actions">

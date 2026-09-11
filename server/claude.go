@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -123,7 +124,7 @@ func AskClaude(ctx context.Context, cfg *Config, ask Ask) (*Written, error) {
 		if cfg.Claude.Mode == "apikey" {
 			reply, err = askViaAPI(ctx, cfg, ask, model)
 		} else {
-			reply, err = askViaCLI(ctx, ask, model)
+			reply, err = askViaCLI(ctx, ask, model, cfg.Claude.OAuthToken)
 		}
 		if err != nil {
 			lastErr = err
@@ -204,7 +205,7 @@ func cliArgs(ask Ask, model string) []string {
 	return args
 }
 
-func askViaCLI(ctx context.Context, ask Ask, model string) (answer, error) {
+func askViaCLI(ctx context.Context, ask Ask, model, oauthToken string) (answer, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
@@ -214,6 +215,14 @@ func askViaCLI(ctx context.Context, ask Ask, model string) (answer, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	// The account's own Claude Code credential, if it gave one, goes in the
+	// environment of this one process and nowhere else: never an argument,
+	// never a file. Without one the CLI uses whatever login the machine has,
+	// which on a laptop is the reader's own.
+	cmd.Env = append(os.Environ(), "DISABLE_AUTOUPDATER=1")
+	if oauthToken != "" {
+		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
+	}
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

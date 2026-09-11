@@ -239,8 +239,9 @@
     <section class="card" data-needs-pairing hidden>
       <h2 class="card__title">Claude</h2>
       <p class="card__note">
-        The server runs Claude for you. On a subscription it drives your local Claude Code, so every
-        model is available and your plan covers it. With an API key it calls the Messages API instead.
+        The server runs Claude for you. On a subscription it drives Claude Code, so every model is
+        available and your plan covers it; on a server that isn't your machine that takes a token
+        from `claude setup-token`. With an API key it calls the Messages API instead.
       </p>
       <div class="row">
         <label class="field">
@@ -261,6 +262,11 @@
         <label class="field" id="apiKeyField" hidden>
           <span class="field__label">API key</span>
           <input type="password" id="apiKey" placeholder="sk-ant-…" spellcheck="false">
+        </label>
+        <label class="field" id="oauthField" hidden>
+          <span class="field__label">Claude Code token</span>
+          <input type="password" id="oauthToken" placeholder="sk-ant-oat01-…" spellcheck="false">
+          <span class="field__help">Only on a server that isn't your machine: run `claude setup-token` on yours and paste what it prints.</span>
         </label>
       </div>
     </section>
