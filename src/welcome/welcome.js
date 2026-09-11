@@ -4,6 +4,7 @@ import {
   connection, setConnection, inExtension, allowHost, linkViaBrowser, linkFinish,
   requestEmailCode, verifyEmailCode, slackSignInURL, slackChannels, getMutes, mute, unmute,
   LOCAL_URL, HOSTED_URL,
+  claudeTest,
 } from "../lib/api.js";
 
 const $ = (id) => document.getElementById(id);
