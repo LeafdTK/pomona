@@ -27,6 +27,9 @@ func fetchCustom(ctx context.Context, src CustomSource) ([]Item, error) {
 	if method != "GET" && method != "HEAD" && src.Body != "" {
 		body = []byte(src.Body)
 	}
+	if err := checkUserURL(src.URL); err != nil {
+		return nil, err
+	}
 	req, err := newRequest(ctx, method, src.URL, body)
 	if err != nil {
 		return nil, err
@@ -41,7 +44,7 @@ func fetchCustom(ctx context.Context, src CustomSource) ([]Item, error) {
 		}
 	}
 
-	res, err := httpClient.Do(req)
+	res, err := userClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -34,12 +34,16 @@ func fetchCalendar(ctx context.Context, settings map[string]string, w Window) ([
 	failures := []string{}
 
 	for _, u := range urls {
+		if err := checkUserURL(u); err != nil {
+			failures = append(failures, err.Error())
+			continue
+		}
 		req, err := newRequest(ctx, "GET", u, nil)
 		if err != nil {
 			failures = append(failures, err.Error())
 			continue
 		}
-		res, err := httpClient.Do(req)
+		res, err := userClient.Do(req)
 		if err != nil {
 			failures = append(failures, clip(err.Error(), 120))
 			continue
