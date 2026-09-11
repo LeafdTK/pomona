@@ -56,7 +56,8 @@ async function boot() {
   // Coming back from Slack with a fresh token in the fragment: keep it, and
   // never let it sit in the address bar.
   const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
-  if (fragment.get("token")) {
+  const cameBack = Boolean(fragment.get("token"));
+  if (cameBack) {
     await setConnection({ token: fragment.get("token") });
     history.replaceState(null, "", location.pathname + location.search);
   }
@@ -70,7 +71,10 @@ async function boot() {
   // the top, unless this person has plainly been here before.
   steps = plan();
   if (connected) {
-    if (mode === "link") return finishLink();
+    // A link is only finished on the way back from a sign-in that just
+    // happened here: a stale signed-in page must not hand out a code
+    // because a URL told it to.
+    if (mode === "link") return cameBack ? finishLink() : show("signin");
     at = Math.max(steps.indexOf("never"), 0);
   } else if (config?.schedule?.set && mode !== "link") {
     at = steps.indexOf("never");
@@ -409,14 +413,15 @@ async function connect(source) {
       config.sources.slack = { ...(config.sources.slack ?? {}), access: tier };
       await putConfig(config).catch(() => {});
     }
+    if (mode === "extension") {
+      // The run has to start and finish in the same browser page the
+      // server can set a cookie on: hand over to the served setup page.
+      const { url: server } = await connection();
+      location.href = `${server}/welcome?step=sources`;
+      return;
+    }
     try {
       const { url } = await slackConnect();
-      if (mode === "extension") {
-        // Slack must land on the server's page, not this one: hand over.
-        const { url: server } = await connection();
-        location.href = `${server}/welcome`;
-        await wait(50);
-      }
       location.href = url;
     } catch (error) {
       note("pickNote", error.message, true);

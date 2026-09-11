@@ -237,3 +237,116 @@ func TestIdentityAccounts(t *testing.T) {
 		t.Error("the deleted account's directory survived")
 	}
 }
+
+// Where a sign-in may land: our own pages, exactly, and nowhere a browser
+// would read as another site.
+func TestSafeNextRefusesOtherSites(t *testing.T) {
+	for raw, want := range map[string]string{
+		"/welcome":                       "/welcome",
+		"/link?state=abc&redirect_uri=x": "/link?redirect_uri=x&state=abc",
+		"/settings":                      "/settings",
+		"/":                              "/",
+		"/\\evil.com":                    "/welcome",
+		"//evil.com":                     "/welcome",
+		"https://evil.com/welcome":       "/welcome",
+		"/welcome#token=x":               "/welcome",
+		"/somewhere-else":                "/welcome",
+		"/welcome\r\nSet-Cookie: a=b":    "/welcome",
+		"":                               "/welcome",
+		"javascript:alert(1)":            "/welcome",
+	} {
+		if got := safeNext(raw); got != want {
+			t.Errorf("safeNext(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+// A Slack run finishes only in the browser that started it.
+func TestOAuthStateIsBoundToTheBrowser(t *testing.T) {
+	o := NewOAuthStates()
+	state, nonce, err := o.Begin("user1", AccessPublic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := o.Claim(state, "some-other-browser"); ok {
+		t.Fatal("a state was claimed from a browser without the cookie")
+	}
+	state, nonce, _ = o.BeginSignIn(AccessAll, "/link")
+	p, ok := o.Claim(state, nonce)
+	if !ok || p.access != AccessAll || p.next != "/link" || p.userID != "" {
+		t.Errorf("claim with the right cookie failed: %+v %v", p, ok)
+	}
+	if _, ok := o.Claim(state, nonce); ok {
+		t.Error("a state was claimed twice")
+	}
+}
+
+// The rate-limit key cannot be chosen by the client.
+func TestClientIPIgnoresForgedForwardedFor(t *testing.T) {
+	try := func(remote string, headers map[string]string) string {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = remote
+		for k, v := range headers {
+			r.Header.Set(k, v)
+		}
+		return clientIP(r)
+	}
+	// Straight from the internet: the socket, whatever the headers say.
+	if got := try("203.0.113.9:1234", map[string]string{"X-Forwarded-For": "1.1.1.1"}); got != "203.0.113.9" {
+		t.Errorf("direct client keyed on a forged header: %q", got)
+	}
+	// Behind our ingress: the rightmost public hop, so a value the client
+	// prepended is never used.
+	if got := try("10.244.0.5:1234", map[string]string{"X-Forwarded-For": "6.6.6.6, 198.51.100.7, 10.0.0.2"}); got != "198.51.100.7" {
+		t.Errorf("proxied client keyed wrongly: %q", got)
+	}
+	// Cloudflare in front: its header wins.
+	if got := try("10.244.0.5:1234", map[string]string{"X-Forwarded-For": "6.6.6.6, 198.51.100.7", "CF-Connecting-IP": "192.0.2.44"}); got != "192.0.2.44" {
+		t.Errorf("cloudflare header not used: %q", got)
+	}
+	if got := try("10.244.0.5:1234", nil); got != "10.244.0.5" {
+		t.Errorf("no headers behind a proxy: %q", got)
+	}
+}
+
+// Sixteen browsers is a limit per account, never on the server.
+func TestDeviceCapIsPerAccount(t *testing.T) {
+	p := NewPairing(nil, func([]Device) error { return nil })
+	first, _ := p.Issue("alice", "Chrome")
+	for i := 0; i < maxDevices+5; i++ {
+		if _, err := p.Issue("mallory", "Chrome"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p.Whose(first) != "alice" {
+		t.Error("a flood of another account's sign-ins signed alice out")
+	}
+	if n := len(p.DevicesFor("mallory")); n != maxDevices {
+		t.Errorf("mallory has %d devices, want the cap %d", n, maxDevices)
+	}
+	// And every sign-in is a fresh token.
+	second, _ := p.Issue("alice", "Chrome")
+	if second == first {
+		t.Error("a sign-in handed back the old token")
+	}
+}
+
+// One account's pairing code cannot be spent, burnt or guessed through
+// another's.
+func TestPairingCodesAreSeparate(t *testing.T) {
+	p := NewPairing(nil, func([]Device) error { return nil })
+	a, _, _ := p.Begin("alice")
+	b, _, _ := p.Begin("bob")
+	for i := 0; i < maxAttempts; i++ {
+		_, _ = p.Claim("000000", "x")
+	}
+	if _, err := p.Claim(a, "x"); err == nil {
+		t.Error("alice's code survived five wrong guesses")
+	}
+	c, _, _ := p.Begin("carol")
+	_ = b
+	token, err := p.Claim(c, "tv")
+	if err != nil || p.Whose(token) != "carol" {
+		t.Errorf("carol's fresh code failed: %v", err)
+	}
+}

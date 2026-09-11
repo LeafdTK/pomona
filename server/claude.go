@@ -123,6 +123,9 @@ func AskClaude(ctx context.Context, cfg *Config, ask Ask) (*Written, error) {
 		var err error
 		if cfg.Claude.Mode == "apikey" {
 			reply, err = askViaAPI(ctx, cfg, ask, model)
+		} else if hostedMode && cfg.Claude.OAuthToken == "" {
+			// Never the machine's own login for a stranger's brief.
+			return nil, errors.New("this server needs your own Claude Code token or an API key; add one in settings")
 		} else {
 			reply, err = askViaCLI(ctx, ask, model, cfg.Claude.OAuthToken)
 		}

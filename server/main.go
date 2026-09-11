@@ -100,6 +100,9 @@ func run(addr, dataDir string, wantPassphrase bool) error {
 		Addr:              addr,
 		Handler:           server.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      2 * time.Minute, // nothing holds a request longer now
+		IdleTimeout:       90 * time.Second,
 	}
 
 	go func() {

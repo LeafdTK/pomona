@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -183,7 +184,8 @@ func (s *Server) emailStart(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, errors.New("that doesn't look like an email address"))
 		return
 	}
-	if !s.limits.Allow("otp:ip:"+clientIP(r), 10, time.Minute) || !s.limits.Allow("otp:"+email, 1, time.Minute) {
+	if !s.limits.Allow("otp:ip:"+clientIP(r), 10, time.Minute) || !s.limits.Allow("otp:"+email, 1, time.Minute) ||
+		!s.limits.Allow("otp:all", 120, time.Hour) {
 		fail(w, http.StatusTooManyRequests, errors.New("a code was sent a moment ago; check your inbox, or wait a minute"))
 		return
 	}
@@ -233,7 +235,7 @@ func (s *Server) emailVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		user = created
 	}
-	token, err := s.pairing.Adopt(user.ID, deviceName(r))
+	token, err := s.pairing.Issue(user.ID, deviceName(r))
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
@@ -260,15 +262,13 @@ func (s *Server) slackSignIn(w http.ResponseWriter, r *http.Request) {
 	default:
 		access = AccessPublic
 	}
-	next := r.URL.Query().Get("next")
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
-		next = "/welcome"
-	}
-	state, err := s.oauth.BeginSignIn(access, next)
+	next := safeNext(r.URL.Query().Get("next"))
+	state, nonce, err := s.oauth.BeginSignIn(access, next)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	setOAuthCookie(w, r, nonce)
 	query := url.Values{
 		"client_id":    {app.ClientID},
 		"user_scope":   {strings.Join(ScopesFor(access), ",")},
@@ -304,6 +304,14 @@ func (s *Server) linkStart(w http.ResponseWriter, r *http.Request, _ *UserStore,
 	}
 	if len(body.State) < 16 || !validLinkRedirect(body.RedirectURI) {
 		fail(w, http.StatusBadRequest, errors.New("that link request isn't one a browser extension would make"))
+		return
+	}
+	if s.hosted && !strings.HasPrefix(body.RedirectURI, "https://") {
+		fail(w, http.StatusBadRequest, errors.New("on a hosted server a link can only go back to the extension"))
+		return
+	}
+	if !s.limits.Allow("link:"+user.ID, 10, time.Hour) {
+		fail(w, http.StatusTooManyRequests, errors.New("too many links; wait an hour"))
 		return
 	}
 	code, err := s.links.Issue(body.State, user.ID)
@@ -348,7 +356,7 @@ func (s *Server) pairExchange(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusUnauthorized, errors.New("that account no longer exists"))
 		return
 	}
-	token, err := s.pairing.Adopt(user.ID, deviceName(r))
+	token, err := s.pairing.Issue(user.ID, deviceName(r))
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
@@ -370,15 +378,54 @@ func (s *Server) pairCode(w http.ResponseWriter, r *http.Request, _ *UserStore, 
 
 // ── Small helpers ───────────────────────────────────────
 
-// clientIP is the address to rate-limit on: the first hop of X-Forwarded-For
-// behind a proxy, else the socket.
-func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		return strings.TrimSpace(strings.SplitN(fwd, ",", 2)[0])
+// safeNext is where a sign-in may land afterwards: one of our own pages,
+// with its query, and nothing else. A prefix check on "/" let "/\evil.com"
+// through, which every browser reads as "//evil.com", and the token rode
+// along in the fragment. So the path is matched exactly, the query is
+// re-encoded from parsed parts, and anything odd becomes the front door.
+func safeNext(raw string) string {
+	if strings.ContainsAny(raw, "\\\r\n\t ") {
+		return "/welcome"
 	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Opaque != "" || u.Fragment != "" {
+		return "/welcome"
+	}
+	switch u.Path {
+	case "/", "/welcome", "/link", "/settings":
+	default:
+		return "/welcome"
+	}
+	out := url.URL{Path: u.Path, RawQuery: u.Query().Encode()}
+	return out.String()
+}
+
+// clientIP is the address to rate-limit on. Behind a proxy the socket is
+// the proxy, so the forwarded headers have to be read, but a client can
+// write those headers too, so only what a proxy in front of us appended is
+// believed: Cloudflare's own header first, else the rightmost forwarded
+// address that is not a private one, else the socket. Direct-to-origin
+// traffic can still choose its own key, which is why every door also has a
+// per-target limit.
+func clientIP(r *http.Request) string {
 	host := r.RemoteAddr
-	if i := strings.LastIndex(host, ":"); i > 0 {
-		host = host[:i]
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	viaProxy := ip != nil && !publicIP(ip)
+	if !viaProxy {
+		return host
+	}
+	if cf := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cf != "" && net.ParseIP(cf) != nil {
+		return cf
+	}
+	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate := net.ParseIP(strings.TrimSpace(parts[i]))
+		if candidate != nil && publicIP(candidate) {
+			return candidate.String()
+		}
 	}
 	return host
 }

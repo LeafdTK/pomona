@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"encoding/json"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -196,8 +196,11 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		"locked":    s.vault.Locked(),
 		"paired":    s.pairing.Count() > 0,
 		"claudeCLI": claudeAvailable(),
-		"gh":        ghAvailable(),
-		"local":     isLoopback(r),
+		"gh":        !s.hosted && ghAvailable(),
+		// "local" is what lets a browser sign itself in with no proof. On a
+		// hosted server it is never true, whatever the socket says: a proxy
+		// moved into the pod must not turn every visitor into the owner.
+		"local": !s.hosted && isLoopback(r),
 		// Only true when someone asked for a passphrase and hasn't set one yet.
 		"needsSetup": s.passphraseMode && !s.vault.Exists(),
 		// Whether locking means anything here. Without a passphrase it doesn't.
@@ -310,7 +313,7 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Off this machine there are no passwords: sign in with Slack or a code.
-	if !isLoopback(r) {
+	if s.hosted || !isLoopback(r) {
 		fail(w, http.StatusForbidden, errors.New("this server makes accounts through Slack or an emailed code, not a password"))
 		return
 	}
@@ -347,8 +350,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := s.store.UserByEmail(body.Email)
-	// Same answer either way, so this can't be used to discover who has an
-	// account here.
+	// Same answer, and the same amount of work, either way: without the
+	// dummy hash an unknown address answers in a millisecond and a known one
+	// in a few hundred, which is a yes or no to whoever is asking.
+	if user == nil {
+		(&User{Salt: "AAAAAAAAAAAAAAAAAAAAAA==", Hash: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}).Matches(body.Password)
+	}
 	if user == nil || !user.Matches(body.Password) {
 		fail(w, http.StatusUnauthorized, errors.New("that email and password don't match"))
 		return
@@ -383,7 +390,7 @@ func deviceName(r *http.Request) string {
 // laptop shouldn't have to prove anything to a server on your own laptop: if
 // something local were hostile it could read ~/.pomona directly.
 func (s *Server) pairAuto(w http.ResponseWriter, r *http.Request) {
-	if !isLoopback(r) {
+	if s.hosted || !isLoopback(r) {
 		fail(w, http.StatusForbidden, errors.New("automatic pairing only works on this machine; use a pairing code"))
 		return
 	}
@@ -486,6 +493,10 @@ func (s *Server) getSources(w http.ResponseWriter, r *http.Request, _ *UserStore
 }
 
 func (s *Server) testSource(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
+	if !s.limits.Allow("test:"+u.ID(), 30, time.Hour) {
+		fail(w, http.StatusTooManyRequests, errors.New("too many tests; wait a while"))
+		return
+	}
 	var body struct {
 		ID     string        `json:"id"`
 		Custom *CustomSource `json:"custom"`
@@ -598,6 +609,10 @@ func (s *Server) guessProfile(w http.ResponseWriter, r *http.Request, u *UserSto
 // off by any proxy in front of a hosted server. The page polls progress and
 // picks the brief up when the board says it is done.
 func (s *Server) generate(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
+	if !s.limits.Allow("write:"+u.ID(), 6, time.Hour) {
+		fail(w, http.StatusTooManyRequests, errors.New("six briefs an hour is plenty; try again later"))
+		return
+	}
 	if s.brief.Progress(u.ID()).Running() {
 		w.WriteHeader(http.StatusAccepted)
 		ok(w, map[string]any{"started": false, "running": true})
@@ -708,6 +723,10 @@ func (s *Server) usage(w http.ResponseWriter, _ *http.Request, u *UserStore, _ *
 // refresh reads every source into the store without writing a brief. Like
 // generate, it starts the job and answers; the page polls progress.
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
+	if !s.limits.Allow("refresh:"+u.ID(), 6, time.Hour) {
+		fail(w, http.StatusTooManyRequests, errors.New("six reads an hour is plenty; try again later"))
+		return
+	}
 	if s.brief.Progress(u.ID()).Running() {
 		w.WriteHeader(http.StatusAccepted)
 		ok(w, map[string]any{"started": false, "running": true})
@@ -927,6 +946,12 @@ func (s *Server) forget(w http.ResponseWriter, r *http.Request, u *UserStore, _ 
 }
 
 func (s *Server) lock(w http.ResponseWriter, r *http.Request, _ *UserStore, _ *User) {
+	// Locking without a passphrase is a lever any account could pull on
+	// everyone: the server would just pick the key back up, after a gap.
+	if !s.passphraseMode || s.hosted {
+		fail(w, http.StatusConflict, errors.New("this server has no passphrase to lock with"))
+		return
+	}
 	s.vault.Lock()
 	ok(w, map[string]any{"ok": true})
 }
@@ -945,8 +970,11 @@ func (s *Server) getServerSettings(w http.ResponseWriter, r *http.Request, _ *Us
 }
 
 func (s *Server) putServerSettings(w http.ResponseWriter, r *http.Request, _ *UserStore, _ *User) {
-	if os.Getenv("POMONA_SLACK_CLIENT_ID") != "" {
-		fail(w, http.StatusConflict, errors.New("the Slack app is set in the environment; edit .env instead"))
+	// On a hosted server the Slack app is the operator's, set in the
+	// environment: an account that could rewrite it could point everyone's
+	// sign-in at an app of its own.
+	if s.hosted || os.Getenv("POMONA_SLACK_CLIENT_ID") != "" || os.Getenv("POMONA_SLACK_CLIENT_SECRET") != "" {
+		fail(w, http.StatusConflict, errors.New("the Slack app is set by whoever runs this server"))
 		return
 	}
 	var body ServerSettings
@@ -1035,7 +1063,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request, _ *UserStore, _ 
 
 func decode(r *http.Request, into any) error {
 	defer r.Body.Close()
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 4<<20))
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
 	if err := dec.Decode(into); err != nil {
 		return errors.New("that request wasn't valid JSON")
 	}
@@ -1044,11 +1072,13 @@ func decode(r *http.Request, into any) error {
 
 func ok(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store") // tokens travel in some of these
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func fail(w http.ResponseWriter, status int, err error) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

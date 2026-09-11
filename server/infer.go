@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -65,9 +66,17 @@ func tokensChanged(before, after *Config) bool {
 }
 
 // inferSoon runs the inference off the request, so connecting a source
-// answers at once and the profile fills in a moment later.
+// answers at once and the profile fills in a moment later. One at a time
+// per account: a loop of config writes must not become a loop of network
+// calls.
+var inferring sync.Map
+
 func inferSoon(u *UserStore) {
+	if _, busy := inferring.LoadOrStore(u.ID(), true); busy {
+		return
+	}
 	go func() {
+		defer inferring.Delete(u.ID())
 		ctx, done := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer done()
 		_ = InferProfile(ctx, u)

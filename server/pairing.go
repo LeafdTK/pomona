@@ -34,23 +34,29 @@ type Device struct {
 	LastSeen time.Time `json:"lastSeen"`
 }
 
-type Pairing struct {
-	mu       sync.Mutex
+// A code outstanding for one account. Each account has at most one, and
+// nobody's code can touch anybody else's: a shared slot let a stranger burn
+// the attempts on whoever's code was live.
+type pairCode struct {
 	code     string
-	codeFor  string // the account the code signs a browser into
 	expires  time.Time
 	attempts int
+}
+
+type Pairing struct {
+	mu    sync.Mutex
+	codes map[string]*pairCode // by account
 
 	devices []Device
 	save    func([]Device) error
 }
 
 func NewPairing(devices []Device, save func([]Device) error) *Pairing {
-	return &Pairing{devices: devices, save: save}
+	return &Pairing{devices: devices, save: save, codes: map[string]*pairCode{}}
 }
 
 // Begin mints a code for one account, to show the person who owns it. Any
-// previous code stops working.
+// previous code of theirs stops working.
 func (p *Pairing) Begin(userID string) (string, time.Time, error) {
 	code, err := sixDigits()
 	if err != nil {
@@ -58,8 +64,14 @@ func (p *Pairing) Begin(userID string) (string, time.Time, error) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.code, p.codeFor, p.expires, p.attempts = code, userID, time.Now().Add(codeTTL), 0
-	return code, p.expires, nil
+	for id, c := range p.codes {
+		if time.Now().After(c.expires) {
+			delete(p.codes, id)
+		}
+	}
+	entry := &pairCode{code: code, expires: time.Now().Add(codeTTL)}
+	p.codes[userID] = entry
+	return code, entry.expires, nil
 }
 
 // Adopt issues a token without a code. Only ever called for connections that
@@ -90,29 +102,51 @@ func (p *Pairing) Adopt(userID, name string) (string, error) {
 }
 
 // Claim exchanges a correct code for a device token, once, on the account
-// the code was minted for.
+// the code was minted for. Every live code is compared, in constant time,
+// and a wrong guess counts against every one of them: a guesser learns
+// nothing about which accounts have codes out.
 func (p *Pairing) Claim(code, name string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.code == "" || time.Now().After(p.expires) {
-		p.code = ""
-		return "", errors.New("that code has expired: ask the server for a new one")
+	matched := ""
+	live := 0
+	for userID, c := range p.codes {
+		if time.Now().After(c.expires) || c.attempts >= maxAttempts {
+			delete(p.codes, userID)
+			continue
+		}
+		live++
+		if subtle.ConstantTimeCompare([]byte(code), []byte(c.code)) == 1 {
+			matched = userID
+		}
 	}
-	if p.attempts >= maxAttempts {
-		p.code = ""
-		return "", errors.New("too many wrong codes: ask the server for a new one")
+	if live == 0 {
+		return "", errors.New("that code has expired: ask for a new one")
 	}
-
-	// Constant time, so the number of wrong guesses is the only signal.
-	if subtle.ConstantTimeCompare([]byte(code), []byte(p.code)) != 1 {
-		p.attempts++
-		return "", fmt.Errorf("that code isn't right (%d attempts left)", maxAttempts-p.attempts)
+	if matched == "" {
+		left := maxAttempts
+		for _, c := range p.codes {
+			c.attempts++
+			if maxAttempts-c.attempts < left {
+				left = maxAttempts - c.attempts
+			}
+		}
+		return "", fmt.Errorf("that code isn't right (%d attempts left)", left)
 	}
 
 	// Correct: burn the code before doing anything else.
-	userID := p.codeFor
-	p.code, p.codeFor = "", ""
+	delete(p.codes, matched)
+	return p.issueLocked(matched, name)
+}
+
+// Issue mints a fresh token for a sign-in that proved itself off this
+// machine. Never a reused one: a token that came back on every sign-in
+// could never be rotated, and two strangers' browsers both called "Chrome"
+// would share it.
+func (p *Pairing) Issue(userID, name string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.issueLocked(userID, name)
 }
 
@@ -135,12 +169,23 @@ func (p *Pairing) issueLocked(userID, name string) (string, error) {
 		PairedAt: time.Now(), LastSeen: time.Now(),
 	})
 
-	// Full: drop whichever device has gone longest without being used. Dropping
-	// the oldest by pairing date instead throws out the browser you use every
-	// morning in favour of one you paired later and never opened again.
-	for len(p.devices) > maxDevices {
-		stalest := 0
+	// Full, for this account: drop whichever of its devices has gone longest
+	// without being used. Dropping the oldest by pairing date instead throws
+	// out the browser you use every morning in favour of one you paired later
+	// and never opened again. The cap is per account: a server-wide one let
+	// seventeen sign-ups sign everyone else out.
+	for {
+		mine := []int{}
 		for i := range p.devices {
+			if p.devices[i].UserID == userID {
+				mine = append(mine, i)
+			}
+		}
+		if len(mine) <= maxDevices {
+			break
+		}
+		stalest := mine[0]
+		for _, i := range mine {
 			if p.devices[i].LastSeen.Before(p.devices[stalest].LastSeen) {
 				stalest = i
 			}

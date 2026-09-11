@@ -2,6 +2,8 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -32,7 +34,20 @@ type pending struct {
 	userID  string // empty for a sign-in: the account is made when Slack answers
 	access  string
 	next    string // where to send the browser afterwards
+	browser string // hash of the cookie the starting browser was given
 	expires time.Time
+}
+
+// The cookie that ties a Slack run to the browser that started it. Without
+// it, a state minted in one browser could be finished in another: an
+// attacker's connect link approved by a victim would put the victim's Slack
+// token in the attacker's account, and a sign-in state completed by the
+// attacker could sign a victim's browser into the attacker's account.
+const oauthCookie = "pomona_oauth"
+
+func hashNonce(nonce string) string {
+	sum := sha256.Sum256([]byte(nonce))
+	return hex.EncodeToString(sum[:])
 }
 
 type OAuthStates struct {
@@ -44,21 +59,25 @@ func NewOAuthStates() *OAuthStates {
 	return &OAuthStates{states: map[string]pending{}}
 }
 
-func (o *OAuthStates) Begin(userID, access string) (string, error) {
+// Begin starts a run for a signed-in account. It returns the state for the
+// authorize URL and the nonce for the browser's cookie.
+func (o *OAuthStates) Begin(userID, access string) (state, nonce string, err error) {
 	return o.begin(pending{userID: userID, access: access})
 }
 
 // BeginSignIn is a run with no account behind it yet.
-func (o *OAuthStates) BeginSignIn(access, next string) (string, error) {
+func (o *OAuthStates) BeginSignIn(access, next string) (state, nonce string, err error) {
 	return o.begin(pending{access: access, next: next})
 }
 
-func (o *OAuthStates) begin(p pending) (string, error) {
-	raw := make([]byte, 24)
+func (o *OAuthStates) begin(p pending) (string, string, error) {
+	raw := make([]byte, 48)
 	if _, err := rand.Read(raw); err != nil {
-		return "", err
+		return "", "", err
 	}
-	state := hex.EncodeToString(raw)
+	state := hex.EncodeToString(raw[:24])
+	nonce := hex.EncodeToString(raw[24:])
+	p.browser = hashNonce(nonce)
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -70,10 +89,12 @@ func (o *OAuthStates) begin(p pending) (string, error) {
 	}
 	p.expires = time.Now().Add(10 * time.Minute)
 	o.states[state] = p
-	return state, nil
+	return state, nonce, nil
 }
 
-func (o *OAuthStates) Claim(state string) (pending, bool) {
+// Claim finishes a run: the state from Slack, and the nonce from the cookie
+// of the browser that came back. Both have to match, once.
+func (o *OAuthStates) Claim(state, nonce string) (pending, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	p, found := o.states[state]
@@ -81,7 +102,29 @@ func (o *OAuthStates) Claim(state string) (pending, bool) {
 	if !found || time.Now().After(p.expires) {
 		return pending{}, false
 	}
+	if subtle.ConstantTimeCompare([]byte(p.browser), []byte(hashNonce(nonce))) != 1 {
+		return pending{}, false
+	}
 	return p, true
+}
+
+// setOAuthCookie gives the browser its half of the run: ten minutes,
+// HttpOnly, sent only on top-level navigations to us, Secure whenever the
+// request came over TLS.
+func setOAuthCookie(w http.ResponseWriter, r *http.Request, nonce string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: oauthCookie, Value: nonce, Path: "/", MaxAge: 600,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+	})
+}
+
+func oauthNonce(r *http.Request) string {
+	c, err := r.Cookie(oauthCookie)
+	if err != nil {
+		return ""
+	}
+	return c.Value
 }
 
 // ── The two ends of the dance ───────────────────────────
@@ -100,11 +143,12 @@ func (s *Server) slackConnect(w http.ResponseWriter, r *http.Request, u *UserSto
 	if access == "" {
 		access = AccessPublic
 	}
-	state, err := s.oauth.Begin(user.ID, access)
+	state, nonce, err := s.oauth.Begin(user.ID, access)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
+	setOAuthCookie(w, r, nonce)
 
 	query := url.Values{
 		"client_id":    {app.ClientID},
@@ -124,7 +168,7 @@ func (s *Server) slackConnect(w http.ResponseWriter, r *http.Request, u *UserSto
 // slackCallback is where Slack sends the browser back. It has no bearer token
 // on it, so everything hangs off the state parameter.
 func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
-	p, valid := s.oauth.Claim(r.URL.Query().Get("state"))
+	p, valid := s.oauth.Claim(r.URL.Query().Get("state"), oauthNonce(r))
 
 	// A connect lands back on settings; a sign-in lands wherever it began,
 	// which is the setup page or the extension's link page.
@@ -145,7 +189,7 @@ func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !valid {
-		finish("That Slack link expired. Try again.", "")
+		finish("That Slack link expired, or was started in a different browser. Try again.", "")
 		return
 	}
 
@@ -203,7 +247,7 @@ func (s *Server) slackCallback(w http.ResponseWriter, r *http.Request) {
 			}
 			user = created
 		}
-		token, err := s.pairing.Adopt(user.ID, deviceName(r))
+		token, err := s.pairing.Issue(user.ID, deviceName(r))
 		if err != nil {
 			finish("Couldn't sign this browser in: "+err.Error(), "")
 			return

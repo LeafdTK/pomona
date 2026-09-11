@@ -67,10 +67,24 @@ const webAppHead = `<link rel="manifest" href="/src/manifest.webmanifest">
 // otherwise every CSS tweak needs a rebuild, which is a slow way to find out
 // you've been looking at stale styles.
 func assets() fs.FS {
+	if hostedMode {
+		return pomona.Files // never the working directory of a public server
+	}
 	if _, err := os.Stat("src/brief/brief.html"); err == nil {
-		return os.DirFS(".")
+		return devTree{}
 	}
 	return pomona.Files
+}
+
+// devTree is the source tree as the pages need it: src and icons, nothing
+// else. Rooting the file server at "." served .env to anyone who asked.
+type devTree struct{}
+
+func (devTree) Open(name string) (fs.File, error) {
+	if name != "src" && name != "icons" && !strings.HasPrefix(name, "src/") && !strings.HasPrefix(name, "icons/") {
+		return nil, fs.ErrNotExist
+	}
+	return os.DirFS(".").Open(name)
 }
 
 func (s *Server) webRoutes(mux *http.ServeMux) {
