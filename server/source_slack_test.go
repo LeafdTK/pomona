@@ -21,6 +21,7 @@ type fakeSlack struct {
 	dms      []slackChannel            // answered to an im/mpim listing
 	history  map[string][]slackMessage // by channel id
 	search   map[string][]any          // by query prefix ("from:@", "@")
+	replies  map[string][]slackMessage // by thread ts, root first
 	scopes   string
 }
 
@@ -29,6 +30,7 @@ func newFakeSlack(t *testing.T) (*fakeSlack, func()) {
 	f := &fakeSlack{
 		history: map[string][]slackMessage{},
 		search:  map[string][]any{},
+		replies: map[string][]slackMessage{},
 		scopes:  "search:read,channels:read,channels:history,groups:read,groups:history,im:read,im:history,mpim:read,mpim:history,users:read",
 	}
 	server := httptest.NewServer(http.HandlerFunc(f.serve))
@@ -66,7 +68,11 @@ func (f *fakeSlack) serve(w http.ResponseWriter, r *http.Request) {
 	case "conversations.history":
 		reply(map[string]any{"ok": true, "messages": f.history[r.URL.Query().Get("channel")]})
 	case "conversations.replies":
-		reply(map[string]any{"ok": true, "messages": []any{}})
+		msgs := f.replies[r.URL.Query().Get("ts")]
+		if msgs == nil {
+			msgs = []slackMessage{}
+		}
+		reply(map[string]any{"ok": true, "messages": msgs})
 	case "search.messages":
 		q := r.URL.Query().Get("query")
 		matches := []any{}
@@ -311,5 +317,60 @@ func TestABusyRoomSurfacesFromTheOutside(t *testing.T) {
 	}
 	if _, quiet := got["#quiet"]; quiet {
 		t.Error("a quiet room the reader is not in was surfaced")
+	}
+}
+
+
+// A mention is read with its thread to the end, and the item says so. The
+// brief once wrote "the thread has been quiet since" about a thread it had
+// never opened, which was three people arguing about kernel versions.
+func TestAMentionCarriesItsThreadToTheEnd(t *testing.T) {
+	f, done := newFakeSlack(t)
+	defer done()
+	now := time.Now()
+	f.search["@"] = []any{
+		map[string]any{
+			"text": "<@U_ME> are the control planes on current kernels?", "user": "U_PARTH", "ts": ts(60),
+			"channel":   map[string]string{"id": "C_INFRA", "name": "infra"},
+			"permalink": "https://t.slack.com/archives/C_INFRA/p" + strings.ReplaceAll(ts(60), ".", ""),
+		},
+		map[string]any{
+			"text": "<@U_ME> ping", "user": "U_OTHER", "ts": ts(50),
+			"channel":   map[string]string{"id": "C_QUIET", "name": "quiet"},
+			"permalink": "https://t.slack.com/archives/C_QUIET/p" + strings.ReplaceAll(ts(50), ".", ""),
+		},
+	}
+	f.replies[ts(60)] = []slackMessage{
+		{Type: "message", TS: ts(60), User: "U_PARTH", Text: "<@U_ME> are the control planes on current kernels?"},
+		{Type: "message", TS: ts(55), User: "U_NORA", Text: "we are two point releases behind on the workers"},
+		{Type: "message", TS: ts(40), User: "U_ROWAN", Text: "control planes were patched this morning"},
+	}
+	f.replies[ts(50)] = []slackMessage{
+		{Type: "message", TS: ts(50), User: "U_OTHER", Text: "<@U_ME> ping"},
+	}
+
+	items, _, err := fetchSlack(t.Context(), map[string]string{"token": "x", "access": AccessAll}, slackWindow(newSignalStore(), now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byOrigin := map[string]Item{}
+	for _, it := range items {
+		if it.Kind == "slack.mention" {
+			byOrigin[it.Origin] = it
+		}
+	}
+	busy, ok := byOrigin["#infra"]
+	if !ok {
+		t.Fatalf("the infra mention was lost: %+v", items)
+	}
+	if !strings.Contains(busy.Body, "patched this morning") || !strings.Contains(busy.Body, "read to the end: 2 replies, 2 after this message") {
+		t.Errorf("the thread's replies were not carried: %q", busy.Body)
+	}
+	if !hasTag(busy.Tags, "thread:read") || len(busy.Lines) != 2 {
+		t.Errorf("the item does not say its thread was read: tags %v, %d lines", busy.Tags, len(busy.Lines))
+	}
+	quiet := byOrigin["#quiet"]
+	if !strings.Contains(quiet.Body, "no replies") || !hasTag(quiet.Tags, "thread:read") {
+		t.Errorf("a thread with nothing after the mention should say so: %q %v", quiet.Body, quiet.Tags)
 	}
 }

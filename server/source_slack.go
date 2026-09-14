@@ -500,12 +500,18 @@ func (h *slackHarvest) who(user, username string) string {
 func (h *slackHarvest) say(text string) string { return h.dir.Render(text) }
 
 // mentions: somebody said your name, anywhere you can see.
+// mentionThreads is how many mention threads are read to the end in one
+// morning. One paced call each; a mention's thread is the one place the
+// current state of the ask lives.
+const mentionThreads = 15
+
 func (h *slackHarvest) mentions(client *slackClient, handle string, w Window) {
+	read := 0
 	for _, m := range slackSearchRaw(client, "@"+handle, w) {
 		if m.at.Before(w.Since) {
 			continue
 		}
-		h.add(m.channelID+"/"+m.ts, Item{
+		item := Item{
 			Kind:   "slack.mention",
 			Title:  fmt.Sprintf("#%s — %s", m.channelName, h.who(m.user, m.username)),
 			Body:   clip(h.say(m.text), 500),
@@ -513,7 +519,62 @@ func (h *slackHarvest) mentions(client *slackClient, handle string, w Window) {
 			Time:   m.at,
 			Tags:   []string{m.channelName},
 			Origin: "#" + m.channelName,
-		})
+		}
+		// The thread this sits in, read to the end, so the brief knows
+		// whether anyone has answered since. Without this a mention was one
+		// message and a guess, and the guess was "quiet since", about a
+		// thread that had been anything but.
+		if read < mentionThreads {
+			read++
+			thread := m.threadTS
+			if thread == "" {
+				thread = m.ts
+			}
+			h.attachThread(client, &item, m.channelID, thread, m.ts, w)
+		}
+		h.add(m.channelID+"/"+m.ts, item)
+	}
+}
+
+// attachThread reads a whole thread and writes its state onto an item: the
+// replies, who made them, and when the last one was, or the fact that there
+// are none. Either way the writer is told the thread was read, so silence
+// is a finding rather than an assumption.
+func (h *slackHarvest) attachThread(client *slackClient, item *Item, channel, thread, mentionTS string, w Window) {
+	var out struct {
+		Messages []slackMessage `json:"messages"`
+	}
+	if err := client.call("conversations.replies", url.Values{"channel": {channel}, "ts": {thread}, "limit": {"60"}}, &out); err != nil {
+		return // unread stays unread, and the prompt says nothing about it
+	}
+	lines := []Line{}
+	var last time.Time
+	after := 0
+	for _, msg := range out.Messages {
+		if !msg.said() || msg.TS == thread {
+			continue
+		}
+		at := slackTime(msg.TS)
+		yours := msg.User == h.me
+		lines = append(lines, Line{TS: msg.TS, Who: h.who(msg.User, msg.Username), Text: clip(h.say(msg.Words()), 220), Mine: yours})
+		if msg.TS > mentionTS {
+			after++
+		}
+		if at.After(last) {
+			last = at
+		}
+	}
+	item.Tags = append(item.Tags, "thread:read")
+	if len(lines) == 0 {
+		item.Body += fmt.Sprintf("\n[thread read at %s: no replies]", w.Now.Format("Mon 15:04"))
+		return
+	}
+	item.Lines = lines
+	item.Body = tail(append([]string{item.Body}, lineText(lines)...), conversationBudget("slack.thread_reply"))
+	item.Body += fmt.Sprintf("\n[thread read to the end: %d repl%s, %d after this message, last at %s]",
+		len(lines), plural(len(lines)), after, last.Format("Mon 15:04"))
+	if last.After(item.Time) {
+		item.Time = last
 	}
 }
 
@@ -1176,8 +1237,12 @@ func slackSearchRaw(client *slackClient, query string, w Window) []slackMatch {
 
 	matches := make([]slackMatch, 0, len(out.Messages.Matches))
 	for _, m := range out.Messages.Matches {
+		threadTS := ""
+		if u, err := url.Parse(m.Permalink); err == nil {
+			threadTS = u.Query().Get("thread_ts")
+		}
 		matches = append(matches, slackMatch{
-			text: m.Text, username: m.Username, user: m.User, ts: m.TS,
+			text: m.Text, username: m.Username, user: m.User, ts: m.TS, threadTS: threadTS,
 			channelID: m.Channel.ID, channelName: m.Channel.Name,
 			permalink: m.Permalink, at: slackTime(m.TS),
 		})
