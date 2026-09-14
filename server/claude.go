@@ -121,13 +121,18 @@ func AskClaude(ctx context.Context, cfg *Config, ask Ask) (*Written, error) {
 	for _, model := range chain {
 		var reply answer
 		var err error
+		token := strings.TrimSpace(cfg.Claude.OAuthToken)
 		if cfg.Claude.Mode == "apikey" {
 			reply, err = askViaAPI(ctx, cfg, ask, model)
-		} else if hostedMode && cfg.Claude.OAuthToken == "" {
+		} else if hostedMode && token == "" {
 			// Never the machine's own login for a stranger's brief.
 			return nil, errors.New("this server needs your own Claude Code token or an API key; add one in settings")
+		} else if token != "" && !strings.HasPrefix(token, "sk-ant-oat") {
+			// The wrong kind of secret in the right box: an API key, a Slack
+			// token, half a paste. Say so before Anthropic says 401.
+			return nil, errors.New("that isn't a Claude Code token (they start with sk-ant-oat01-); run `claude setup-token` on your machine and paste what it prints, or switch to an API key")
 		} else {
-			reply, err = askViaCLI(ctx, ask, model, cfg.Claude.OAuthToken)
+			reply, err = askViaCLI(ctx, ask, model, token)
 		}
 		if err != nil {
 			lastErr = err
@@ -320,7 +325,7 @@ func askViaAPI(ctx context.Context, cfg *Config, ask Ask, model string) (answer,
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("anthropic-version", "2023-06-01")
-	req.Header.Set("x-api-key", cfg.Claude.APIKey)
+	req.Header.Set("x-api-key", strings.TrimSpace(cfg.Claude.APIKey))
 
 	started := time.Now()
 	res, err := httpClient.Do(req)

@@ -466,6 +466,9 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request, u *UserStore,
 			delete(cfg.Profile.Inferred, field)
 		}
 	}
+	// Pasted secrets arrive with whatever the clipboard added.
+	cfg.Claude.APIKey = strings.TrimSpace(cfg.Claude.APIKey)
+	cfg.Claude.OAuthToken = strings.TrimSpace(cfg.Claude.OAuthToken)
 	if err := u.SetConfig(&cfg); err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
