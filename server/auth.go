@@ -196,7 +196,7 @@ func (s *Server) emailStart(w http.ResponseWriter, r *http.Request) {
 	}
 	text := fmt.Sprintf("Your Pomona sign-in code is %s\n\nIt works for ten minutes, once. If you didn't ask for it, ignore this.", code)
 	if err := sendMail(r.Context(), email, "Your Pomona code: "+code, text); err != nil {
-		fail(w, http.StatusBadGateway, errors.New("the code couldn't be sent: "+err.Error()))
+		fail(w, http.StatusFailedDependency, errors.New("the code couldn't be sent: "+err.Error()))
 		return
 	}
 	ok(w, map[string]any{"sent": true})

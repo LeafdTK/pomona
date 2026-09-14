@@ -598,7 +598,7 @@ func (s *Server) progress(w http.ResponseWriter, _ *http.Request, u *UserStore, 
 func (s *Server) plate(w http.ResponseWriter, r *http.Request, u *UserStore, _ *User) {
 	painting, err := PickPainting(r.Context(), DayKey(u.Config().Now()))
 	if err != nil {
-		fail(w, http.StatusBadGateway, err)
+		fail(w, http.StatusFailedDependency, err)
 		return
 	}
 	ok(w, painting)
@@ -686,7 +686,7 @@ func (s *Server) githubConnect(w http.ResponseWriter, r *http.Request, u *UserSt
 	}
 	login, err := ConnectGitHubViaGH(r.Context(), u)
 	if err != nil {
-		fail(w, http.StatusBadGateway, err)
+		fail(w, http.StatusFailedDependency, err)
 		return
 	}
 	ok(w, map[string]any{"login": login, "via": "gh"})
@@ -1045,7 +1045,7 @@ func (s *Server) claudeTest(w http.ResponseWriter, r *http.Request, u *UserStore
 		Models: cfg.Small(), MaxTokens: 16, Purpose: "test",
 	})
 	if err != nil {
-		fail(w, http.StatusBadGateway, err)
+		fail(w, http.StatusFailedDependency, err)
 		return
 	}
 	ok(w, map[string]any{"ok": true, "model": written.Model})
@@ -1061,7 +1061,7 @@ func (s *Server) slackChannels(w http.ResponseWriter, r *http.Request, u *UserSt
 	}
 	rooms, err := slackRooms(r.Context(), settings)
 	if err != nil {
-		fail(w, http.StatusBadGateway, err)
+		fail(w, http.StatusFailedDependency, err)
 		return
 	}
 	ok(w, rooms)
@@ -1103,6 +1103,9 @@ func ok(w http.ResponseWriter, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+// fail never sends 502 or 504: Cloudflare replaces an origin's body on
+// those with its own error page, and the reason, which is the whole point,
+// never reaches the reader. Upstream refusals are 424 instead.
 func fail(w http.ResponseWriter, status int, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
